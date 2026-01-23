@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { AuthHandler } from "@/components/AuthHandler";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -21,6 +22,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen bg-background antialiased">
+        <AuthHandler />
         {children}
       </body>
     </html>
