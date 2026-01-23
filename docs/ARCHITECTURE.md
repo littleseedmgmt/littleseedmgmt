@@ -86,11 +86,12 @@ The system supports multiple schools through a **shared database with row-level 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        SCHOOLS TABLE                             │
+│  (All schools owned by Alpna & Prashant)                        │
 │  ┌─────────────────────────────────────────────────────────────┐│
-│  │ id │ name              │ address        │ timezone          ││
-│  │ 1  │ LittleSeed North  │ San Jose, CA   │ America/Los_Angeles│
-│  │ 2  │ LittleSeed South  │ Fremont, CA    │ America/Los_Angeles│
-│  │ 3  │ LittleSeed East   │ Milpitas, CA   │ America/Los_Angeles│
+│  │ id │ name                          │ city     │ timezone    ││
+│  │ 1  │ Peter Pan Mariner Square      │ Alameda  │ America/LA  ││
+│  │ 2  │ Little Seeds Children's Center│ Alameda  │ America/LA  ││
+│  │ 3  │ Peter Pan Harbor Bay (HB)     │ Alameda  │ America/LA  ││
 │  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -109,10 +110,59 @@ The system supports multiple schools through a **shared database with row-level 
 
 | Role | Access Level | Capabilities |
 |------|--------------|--------------|
-| **Super Admin** | All schools | Full system access, user management, all reports |
-| **School Admin** | Single school | Manage their school's data, staff, reports |
+| **Super Admin (Owner)** | All schools | Full system access, user management, all reports |
+| **School Admin (Director)** | Single school | Manage their school's data, staff, reports |
 | **Teacher** | Single school | View schedules, mark attendance, request PTO |
 | **Staff** | Single school | Limited access based on assigned permissions |
+
+### Owner View (Super Admin - Alpna & Prashant)
+Owners see **all three schools on the same screen**, but data is **NOT merged** - each school is displayed in its own visual section, stacked vertically:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Dashboard                                                    [👤 Alpna]    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─ Peter Pan Mariner Square ─────────────────────────────────────────────┐│
+│  │  Students: 247  │  Present Today: 238  │  Teachers On Duty: 16         ││
+│  │  [View Details]                                                        ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│  ┌─ Little Seeds Children's Center ───────────────────────────────────────┐│
+│  │  Students: 89   │  Present Today: 85   │  Teachers On Duty: 8          ││
+│  │  [View Details]                                                        ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│  ┌─ Peter Pan Harbor Bay ─────────────────────────────────────────────────┐│
+│  │  Students: 72   │  Present Today: 70   │  Teachers On Duty: 9          ││
+│  │  [View Details]                                                        ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+This stacked layout applies to:
+- **Dashboard**: Each school's summary stacked
+- **Calendar**: Each school's weekly schedule stacked
+- **Staff Planning**: Each school's staffing view stacked
+- **Reports**: Can select individual school or view all stacked
+
+### Director View (School Admin - e.g., Julie DeMauri at Mariner Square)
+Directors see **only their school's data** - no school selector needed:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Peter Pan Mariner Square                               [👤 Julie DeMauri]  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Dashboard │ Attendance │ Calendar │ Staff │ Reports                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Cross-School Teacher Visibility**: Directors can see teachers from other schools when:
+- A teacher from another school is covering at their location
+- Viewing available floaters for coverage requests
+
+Teachers belong to a **primary school** but can appear in other schools' calendars when providing coverage
 
 ## Security Considerations
 

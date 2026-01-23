@@ -149,7 +149,42 @@ POST   /api/attendance/bulk         Bulk create/update records
 
 ## UI Screens
 
-### 1. Attendance Dashboard
+### View Modes
+
+The Attendance app has two distinct view modes based on user role:
+
+1. **Owner View (Alpna/Prashant)**: All three schools stacked vertically on one screen
+2. **Director/Teacher View**: Single school only (their assigned school)
+
+### 1. Owner Multi-School Attendance View (Stacked)
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Attendance                                            January 22, 2026     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─ Peter Pan Mariner Square ─────────────────────────────────────────────┐│
+│  │  Present: 238/247 (96.4%)  │  Absent: 5  │  Late: 3  │  Excused: 1     ││
+│  │  4 students not yet checked in                          [View Details]  ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│  ┌─ Little Seeds Children's Center ───────────────────────────────────────┐│
+│  │  Present: 85/89 (95.5%)    │  Absent: 3  │  Late: 1  │  Excused: 0     ││
+│  │  ✓ All students checked in                              [View Details]  ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│  ┌─ Peter Pan Harbor Bay ─────────────────────────────────────────────────┐│
+│  │  Present: 70/72 (97.2%)    │  Absent: 1  │  Late: 1  │  Excused: 0     ││
+│  │  ✓ All students checked in                              [View Details]  ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│  ── Organization Total ───────────────────────────────────────────────────  │
+│  │  Present: 393/408 (96.3%)  │  Absent: 9  │  Late: 5  │  Excused: 1     │ │
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2. Director/Teacher Single-School Attendance Dashboard
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Attendance                                    January 22, 2026 │

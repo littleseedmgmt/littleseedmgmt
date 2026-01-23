@@ -195,7 +195,42 @@ GET    /api/pto/balance/:teacher   Get specific teacher's balance
 
 ## UI Screens
 
-### 1. Staff Planning Dashboard (Admin)
+### View Modes
+
+The Staff Planning app has two distinct view modes based on user role:
+
+1. **Owner View (Alpna/Prashant)**: All three schools stacked vertically on one screen
+2. **Director View**: Single school only (their assigned school)
+
+### 1. Owner Multi-School Staff Planning View (Stacked)
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Staff Planning                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─ Peter Pan Mariner Square ─────────────────────────────────────────────┐│
+│  │  On Duty: 16  │  On PTO: 2  │  Pending PTO: 3  │  Hours Today: 128     ││
+│  │  ⚠️ Julie needs coverage Wed 1/22                        [View Details] ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│  ┌─ Little Seeds Children's Center ───────────────────────────────────────┐│
+│  │  On Duty: 8   │  On PTO: 0  │  Pending PTO: 1  │  Hours Today: 64      ││
+│  │  ✓ Fully staffed                                         [View Details] ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│  ┌─ Peter Pan Harbor Bay ─────────────────────────────────────────────────┐│
+│  │  On Duty: 9   │  On PTO: 1  │  Pending PTO: 2  │  Hours Today: 72      ││
+│  │  ✓ Fully staffed                                         [View Details] ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│  ┌─ All Schools - Pending PTO Requests ───────────────────────────────────┐│
+│  │  6 requests awaiting approval                            [Review All]  ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2. Director Staff Planning Dashboard (Single School)
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  Staff Planning                                                             │

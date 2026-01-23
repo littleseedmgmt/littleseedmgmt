@@ -110,7 +110,7 @@ export type Database = {
           id: string
           school_id: string
           name: string
-          age_group: 'infant' | 'toddler' | 'preschool' | 'pre_k'
+          age_group: 'infant' | 'toddler' | 'twos' | 'threes' | 'preschool' | 'pre_k'
           capacity: number
           current_enrollment: number
           lead_teacher_id: string | null
@@ -121,7 +121,7 @@ export type Database = {
           id?: string
           school_id: string
           name: string
-          age_group: 'infant' | 'toddler' | 'preschool' | 'pre_k'
+          age_group: 'infant' | 'toddler' | 'twos' | 'threes' | 'preschool' | 'pre_k'
           capacity: number
           current_enrollment?: number
           lead_teacher_id?: string | null
@@ -212,10 +212,23 @@ export type Database = {
           last_name: string
           email: string | null
           phone: string | null
+          role: 'director' | 'assistant_director' | 'lead_teacher' | 'teacher' | 'assistant' | 'floater'
+          classroom_title: string | null
+          regular_shift_start: string | null
+          regular_shift_end: string | null
+          lunch_break_start: string | null
+          lunch_break_end: string | null
+          qualifications: string | null
+          degrees: string | null
+          years_experience: number | null
+          photo_url: string | null
           hire_date: string
           status: 'active' | 'on_leave' | 'terminated'
           hourly_rate: number | null
           pto_balance: number
+          pto_balance_vacation: number
+          pto_balance_sick: number
+          pto_balance_personal: number
           created_at: string
           updated_at: string
         }
@@ -228,10 +241,23 @@ export type Database = {
           last_name: string
           email?: string | null
           phone?: string | null
+          role?: 'director' | 'assistant_director' | 'lead_teacher' | 'teacher' | 'assistant' | 'floater'
+          classroom_title?: string | null
+          regular_shift_start?: string | null
+          regular_shift_end?: string | null
+          lunch_break_start?: string | null
+          lunch_break_end?: string | null
+          qualifications?: string | null
+          degrees?: string | null
+          years_experience?: number | null
+          photo_url?: string | null
           hire_date: string
           status?: 'active' | 'on_leave' | 'terminated'
           hourly_rate?: number | null
           pto_balance?: number
+          pto_balance_vacation?: number
+          pto_balance_sick?: number
+          pto_balance_personal?: number
           created_at?: string
           updated_at?: string
         }
@@ -244,10 +270,23 @@ export type Database = {
           last_name?: string
           email?: string | null
           phone?: string | null
+          role?: 'director' | 'assistant_director' | 'lead_teacher' | 'teacher' | 'assistant' | 'floater'
+          classroom_title?: string | null
+          regular_shift_start?: string | null
+          regular_shift_end?: string | null
+          lunch_break_start?: string | null
+          lunch_break_end?: string | null
+          qualifications?: string | null
+          degrees?: string | null
+          years_experience?: number | null
+          photo_url?: string | null
           hire_date?: string
           status?: 'active' | 'on_leave' | 'terminated'
           hourly_rate?: number | null
           pto_balance?: number
+          pto_balance_vacation?: number
+          pto_balance_sick?: number
+          pto_balance_personal?: number
           created_at?: string
           updated_at?: string
         }
@@ -302,6 +341,13 @@ export type Database = {
           date: string
           start_time: string
           end_time: string
+          shift_type: 'regular' | 'coverage' | 'overtime'
+          break1_start: string | null
+          break1_end: string | null
+          lunch_start: string | null
+          lunch_end: string | null
+          break2_start: string | null
+          break2_end: string | null
           actual_start: string | null
           actual_end: string | null
           status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
@@ -317,6 +363,13 @@ export type Database = {
           date: string
           start_time: string
           end_time: string
+          shift_type?: 'regular' | 'coverage' | 'overtime'
+          break1_start?: string | null
+          break1_end?: string | null
+          lunch_start?: string | null
+          lunch_end?: string | null
+          break2_start?: string | null
+          break2_end?: string | null
           actual_start?: string | null
           actual_end?: string | null
           status?: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
@@ -332,6 +385,13 @@ export type Database = {
           date?: string
           start_time?: string
           end_time?: string
+          shift_type?: 'regular' | 'coverage' | 'overtime'
+          break1_start?: string | null
+          break1_end?: string | null
+          lunch_start?: string | null
+          lunch_end?: string | null
+          break2_start?: string | null
+          break2_end?: string | null
           actual_start?: string | null
           actual_end?: string | null
           status?: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
@@ -398,9 +458,11 @@ export type Database = {
       user_role: 'super_admin' | 'school_admin' | 'teacher' | 'staff'
       student_status: 'enrolled' | 'withdrawn' | 'graduated' | 'on_leave'
       employment_status: 'active' | 'on_leave' | 'terminated'
-      age_group: 'infant' | 'toddler' | 'preschool' | 'pre_k'
+      teacher_role: 'director' | 'assistant_director' | 'lead_teacher' | 'teacher' | 'assistant' | 'floater'
+      age_group: 'infant' | 'toddler' | 'twos' | 'threes' | 'preschool' | 'pre_k'
       attendance_status: 'present' | 'absent' | 'late' | 'excused'
       shift_status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled'
+      shift_type: 'regular' | 'coverage' | 'overtime'
       pto_type: 'vacation' | 'sick' | 'personal' | 'unpaid'
       approval_status: 'pending' | 'approved' | 'rejected'
     }

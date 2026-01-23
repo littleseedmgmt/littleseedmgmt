@@ -181,7 +181,54 @@ GET    /api/coverage/gaps          Get coverage gaps
 
 ## UI Screens
 
-### 1. Weekly Calendar View
+### View Modes
+
+The Calendar app has two distinct view modes based on user role:
+
+1. **Owner View (Alpna/Prashant)**: All three schools stacked vertically on one screen
+2. **Director View**: Single school only (their assigned school)
+
+### 1. Owner Multi-School Calendar View (Stacked)
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Calendar                                             Week of Jan 20, 2026  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  [Day] [Week] [Month]                                        [+ Add Event]  │
+│                                                                             │
+│  ┌─ Peter Pan Mariner Square ─────────────────────────────────────────────┐│
+│  │  Mon 1/20   │  Tue 1/21   │  Wed 1/22   │  Thu 1/23   │  Fri 1/24     ││
+│  │ ┌─────────┐ │ ┌─────────┐ │ ┌─────────┐ │ ┌─────────┐ │ ┌─────────┐   ││
+│  │ │Toddler A│ │ │Toddler A│ │ │Toddler A│ │ │Toddler A│ │ │Toddler A│   ││
+│  │ │Sarah J  │ │ │Sarah J  │ │ │Sarah J  │ │ │Sarah J  │ │ │Sarah J  │   ││
+│  │ │Mike C   │ │ │Mike C   │ │ │Mike C   │ │ │Mike C   │ │ │Mike C   │   ││
+│  │ └─────────┘ │ └─────────┘ │ └─────────┘ │ └─────────┘ │ └─────────┘   ││
+│  │  ⚠️ 1 coverage gap                                      [View Details] ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│  ┌─ Little Seeds Children's Center ───────────────────────────────────────┐│
+│  │  Mon 1/20   │  Tue 1/21   │  Wed 1/22   │  Thu 1/23   │  Fri 1/24     ││
+│  │ ┌─────────┐ │ ┌─────────┐ │ ┌─────────┐ │ ┌─────────┐ │ ┌─────────┐   ││
+│  │ │Squirrels│ │ │Squirrels│ │ │Squirrels│ │ │Squirrels│ │ │Squirrels│   ││
+│  │ │Judi T   │ │ │Judi T   │ │ │Judi T   │ │ │Judi T   │ │ │Judi T   │   ││
+│  │ │Tam T    │ │ │Tam T    │ │ │Tam T    │ │ │Tam T    │ │ │Tam T    │   ││
+│  │ └─────────┘ │ └─────────┘ │ └─────────┘ │ └─────────┘ │ └─────────┘   ││
+│  │  ✓ Fully staffed                                        [View Details] ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+│  ┌─ Peter Pan Harbor Bay ─────────────────────────────────────────────────┐│
+│  │  Mon 1/20   │  Tue 1/21   │  Wed 1/22   │  Thu 1/23   │  Fri 1/24     ││
+│  │ ┌─────────┐ │ ┌─────────┐ │ ┌─────────┐ │ ┌─────────┐ │ ┌─────────┐   ││
+│  │ │Ladybugs │ │ │Ladybugs │ │ │Ladybugs │ │ │Ladybugs │ │ │Ladybugs │   ││
+│  │ │Kirsten C│ │ │Kirsten C│ │ │Kirsten C│ │ │Kirsten C│ │ │Kirsten C│   ││
+│  │ │Thao H   │ │ │Thao H   │ │ │Thao H   │ │ │Thao H   │ │ │Thao H   │   ││
+│  │ └─────────┘ │ └─────────┘ │ └─────────┘ │ └─────────┘ │ └─────────┘   ││
+│  │  ✓ Fully staffed                                        [View Details] ││
+│  └────────────────────────────────────────────────────────────────────────┘│
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 2. Director Single-School Weekly Calendar View
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  Calendar                              [◀ Week]  Jan 20-26, 2026  [Week ▶]  │

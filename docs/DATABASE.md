@@ -89,11 +89,11 @@ CREATE TABLE schools (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Initial schools
+-- Initial schools (owned by Alpna & Prashant)
 INSERT INTO schools (name, city, state) VALUES
-  ('LittleSeed North', 'San Jose', 'CA'),
-  ('LittleSeed South', 'Fremont', 'CA'),
-  ('LittleSeed East', 'Milpitas', 'CA');
+  ('Peter Pan Mariner Square', 'Alameda', 'CA'),
+  ('Little Seeds Children''s Center', 'Alameda', 'CA'),
+  ('Peter Pan Harbor Bay', 'Alameda', 'CA');
 ```
 
 ### users
@@ -162,34 +162,54 @@ CREATE INDEX idx_students_status ON students(school_id, status);
 
 ### teachers
 
+Teachers belong to a **primary school** (school_id) but can work at any school via the `shifts` table for coverage.
+
 ```sql
 CREATE TYPE employment_status AS ENUM ('active', 'on_leave', 'terminated');
+CREATE TYPE teacher_role AS ENUM ('director', 'lead_teacher', 'teacher', 'assistant', 'floater');
 
 CREATE TABLE teachers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE, -- Primary school
   user_id UUID REFERENCES users(id),
   employee_id VARCHAR(50) UNIQUE,
   first_name VARCHAR(100) NOT NULL,
   last_name VARCHAR(100) NOT NULL,
   email VARCHAR(255),
   phone VARCHAR(20),
+  role teacher_role NOT NULL DEFAULT 'teacher',
+  classroom_title VARCHAR(100), -- e.g., "Teacher (Ladybugs)", "Lead Teacher (Ponies 3s)"
   hire_date DATE NOT NULL,
   status employment_status DEFAULT 'active',
   hourly_rate DECIMAL(10,2),
-  pto_balance DECIMAL(5,2) DEFAULT 0,
+  -- Regular shift info (from spreadsheet)
+  regular_shift_start TIME,
+  regular_shift_end TIME,
+  lunch_break_start TIME,
+  lunch_break_end TIME,
+  -- Qualifications
+  qualifications VARCHAR(255), -- e.g., "Infant & Preschool Teacher Qualified"
+  degrees VARCHAR(100), -- e.g., "BA", "AA"
+  years_experience INTEGER,
+  -- PTO tracking
+  pto_balance_vacation DECIMAL(5,2) DEFAULT 0,
+  pto_balance_sick DECIMAL(5,2) DEFAULT 0,
+  pto_balance_personal DECIMAL(5,2) DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_teachers_school ON teachers(school_id);
 CREATE INDEX idx_teachers_user ON teachers(user_id);
+CREATE INDEX idx_teachers_role ON teachers(school_id, role);
 ```
+
+**Cross-School Coverage**: A teacher's `school_id` is their home school, but they can be assigned shifts at any school. The `shifts` table has its own `school_id` field, which may differ from the teacher's home school when providing coverage.
 
 ### classrooms
 
 ```sql
-CREATE TYPE age_group AS ENUM ('infant', 'toddler', 'preschool', 'pre_k');
+CREATE TYPE age_group AS ENUM ('infant', 'toddler', 'twos', 'threes', 'pre_k');
 
 CREATE TABLE classrooms (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -205,6 +225,31 @@ CREATE TABLE classrooms (
 );
 
 CREATE INDEX idx_classrooms_school ON classrooms(school_id);
+
+-- Seed data: Classrooms by school
+-- Note: school_id references would use actual UUIDs in production
+
+-- Peter Pan Mariner Square classrooms
+INSERT INTO classrooms (school_id, name, age_group, capacity) VALUES
+  ((SELECT id FROM schools WHERE name = 'Peter Pan Mariner Square'), 'Caterpillars', 'infant', 12),
+  ((SELECT id FROM schools WHERE name = 'Peter Pan Mariner Square'), 'Tadpoles', 'toddler', 12),
+  ((SELECT id FROM schools WHERE name = 'Peter Pan Mariner Square'), 'Tigers', 'twos', 16),
+  ((SELECT id FROM schools WHERE name = 'Peter Pan Mariner Square'), 'Ponies', 'threes', 20),
+  ((SELECT id FROM schools WHERE name = 'Peter Pan Mariner Square'), 'Soda Pop', 'pre_k', 24);
+
+-- Little Seeds Children's Center classrooms
+INSERT INTO classrooms (school_id, name, age_group, capacity) VALUES
+  ((SELECT id FROM schools WHERE name = 'Little Seeds Children''s Center'), 'Squirrels', 'infant', 12),
+  ((SELECT id FROM schools WHERE name = 'Little Seeds Children''s Center'), 'Bunnies', 'twos', 16),
+  ((SELECT id FROM schools WHERE name = 'Little Seeds Children''s Center'), 'Chipmunks', 'threes', 20),
+  ((SELECT id FROM schools WHERE name = 'Little Seeds Children''s Center'), 'Bears', 'pre_k', 24);
+
+-- Peter Pan Harbor Bay classrooms
+INSERT INTO classrooms (school_id, name, age_group, capacity) VALUES
+  ((SELECT id FROM schools WHERE name = 'Peter Pan Harbor Bay'), 'Ladybugs', 'infant', 12),
+  ((SELECT id FROM schools WHERE name = 'Peter Pan Harbor Bay'), 'Grasshoppers', 'twos', 16),
+  ((SELECT id FROM schools WHERE name = 'Peter Pan Harbor Bay'), 'Butterflies', 'threes', 20),
+  ((SELECT id FROM schools WHERE name = 'Peter Pan Harbor Bay'), 'Dragonflies', 'pre_k', 24);
 ```
 
 ### attendance
@@ -233,19 +278,31 @@ CREATE INDEX idx_attendance_student ON attendance(student_id);
 
 ### shifts
 
+Shifts track where a teacher is working on a given day. The `school_id` is where the shift takes place, which may differ from the teacher's primary school when providing coverage.
+
 ```sql
 CREATE TYPE shift_status AS ENUM ('scheduled', 'in_progress', 'completed', 'cancelled');
+CREATE TYPE shift_type AS ENUM ('regular', 'coverage', 'overtime');
 
 CREATE TABLE shifts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE, -- Where shift takes place
   teacher_id UUID NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
   classroom_id UUID REFERENCES classrooms(id),
   date DATE NOT NULL,
   start_time TIME NOT NULL,
   end_time TIME NOT NULL,
+  -- Break times (everyone gets 2x10min breaks + variable lunch)
+  break1_start TIME, -- Morning 10-min break
+  break1_end TIME,
+  lunch_start TIME,  -- Lunch break (1hr or 90min)
+  lunch_end TIME,
+  break2_start TIME, -- Afternoon 10-min break
+  break2_end TIME,
+  -- Actual times (clock in/out)
   actual_start TIME,
   actual_end TIME,
+  shift_type shift_type DEFAULT 'regular',
   status shift_status DEFAULT 'scheduled',
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -254,7 +311,10 @@ CREATE TABLE shifts (
 
 CREATE INDEX idx_shifts_school_date ON shifts(school_id, date);
 CREATE INDEX idx_shifts_teacher ON shifts(teacher_id);
+CREATE INDEX idx_shifts_classroom ON shifts(classroom_id, date);
 ```
+
+**Cross-School Coverage Example**: If Aura Batres (floater at Mariner Square) covers at Harbor Bay, her shift record would have `school_id` = Harbor Bay, while her `teachers.school_id` remains Mariner Square.
 
 ### pto_requests
 
