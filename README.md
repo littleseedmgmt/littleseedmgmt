@@ -52,25 +52,57 @@ littleseedmgmt/
 │   ├── ARCHITECTURE.md          # System architecture
 │   ├── DATABASE.md              # Database schema design
 │   ├── DEPLOYMENT.md            # Deployment guide
+│   ├── DESIGN_SYSTEM.md         # UI/UX design guidelines
 │   └── applications/            # Application-specific docs
 │       ├── attendance.md
 │       ├── calendar.md
 │       ├── staff-planning.md
 │       ├── inventory.md
 │       └── financial.md
-├── src/                         # Source code (when implemented)
-│   ├── app/                     # Next.js app router
+├── src/                         # Source code
+│   ├── app/                     # Next.js App Router pages
 │   ├── components/              # React components
 │   ├── lib/                     # Utilities and helpers
-│   └── types/                   # TypeScript types
+│   └── types/                   # TypeScript type definitions
 ├── supabase/                    # Supabase configuration
 │   └── migrations/              # Database migrations
-└── tests/                       # Test files
+└── public/                      # Static assets
 ```
 
 ## Getting Started
 
-Documentation is currently in the planning phase. See the [Architecture Document](docs/ARCHITECTURE.md) for technical details.
+### Prerequisites
+
+- Node.js 18+
+- npm or yarn
+- Supabase account (free tier available)
+
+### Development
+
+```bash
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .env.example .env.local
+# Edit .env.local with your Supabase credentials
+
+# Start development server
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to view the application.
+
+### Environment Variables
+
+Create a `.env.local` file with:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
+
+See the [Deployment Guide](docs/DEPLOYMENT.md) for complete setup instructions.
 
 ## Links
 
