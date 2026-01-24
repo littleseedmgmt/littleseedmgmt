@@ -103,14 +103,27 @@ export async function POST(request: NextRequest) {
     })
 
     // Extract the text response
-    const responseText = message.content[0].type === 'text' ? message.content[0].text : ''
+    let responseText = message.content[0].type === 'text' ? message.content[0].text : ''
+
+    // Clean up response - remove markdown code blocks if present
+    responseText = responseText.trim()
+    if (responseText.startsWith('```json')) {
+      responseText = responseText.slice(7)
+    } else if (responseText.startsWith('```')) {
+      responseText = responseText.slice(3)
+    }
+    if (responseText.endsWith('```')) {
+      responseText = responseText.slice(0, -3)
+    }
+    responseText = responseText.trim()
 
     let parsed: ParsedSummary
     try {
       parsed = JSON.parse(responseText)
-    } catch {
+    } catch (parseError) {
+      console.error('Failed to parse Claude response:', responseText)
       return NextResponse.json(
-        { error: 'Failed to parse Claude response as JSON', raw_response: responseText },
+        { error: `Failed to parse Claude response as JSON: ${responseText.substring(0, 200)}` },
         { status: 500 }
       )
     }
