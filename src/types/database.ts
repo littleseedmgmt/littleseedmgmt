@@ -447,6 +447,44 @@ export type Database = {
           updated_at?: string
         }
       }
+      director_daily_summaries: {
+        Row: {
+          id: string
+          school_id: string
+          date: string
+          student_counts: Json
+          teacher_absences: Json
+          schedule_changes: Json
+          raw_message: string
+          submitted_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          school_id: string
+          date: string
+          student_counts?: Json
+          teacher_absences?: Json
+          schedule_changes?: Json
+          raw_message: string
+          submitted_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          school_id?: string
+          date?: string
+          student_counts?: Json
+          teacher_absences?: Json
+          schedule_changes?: Json
+          raw_message?: string
+          submitted_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -475,6 +513,19 @@ export type InsertTables<T extends keyof Database['public']['Tables']> = Databas
 export type UpdateTables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update']
 export type Enums<T extends keyof Database['public']['Enums']> = Database['public']['Enums'][T]
 
+// Director Daily Summary types
+export interface StudentCount {
+  age_group: string
+  count: number
+  qualified_teachers: number
+  aides: number
+}
+
+export interface ScheduleChange {
+  name: string
+  note: string
+}
+
 // Convenience types
 export type School = Tables<'schools'>
 export type User = Tables<'users'>
@@ -485,3 +536,4 @@ export type Teacher = Tables<'teachers'>
 export type Attendance = Tables<'attendance'>
 export type Shift = Tables<'shifts'>
 export type PTORequest = Tables<'pto_requests'>
+export type DirectorDailySummary = Tables<'director_daily_summaries'>
