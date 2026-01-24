@@ -76,8 +76,9 @@ function SchoolCard({ school, stats, expanded = false }: { school: School; stats
 }
 
 export function DashboardContent() {
-  const { schools, currentSchool, isOwner, loading } = useAuth()
+  const { schools: authSchools, currentSchool, isOwner, loading } = useAuth()
   const { markDataReady } = useComponentPerf('DashboardContent')
+  const [schools, setSchools] = useState<School[]>([])
   const [stats, setStats] = useState<StatsState>({})
   const [totals, setTotals] = useState<SchoolStats>({
     studentCount: 0,
@@ -98,34 +99,50 @@ export function DashboardContent() {
 
   useEffect(() => {
     async function fetchStats() {
-      if (schools.length === 0) {
-        setStatsLoading(false)
-        markDataReady()
-        return
-      }
-
       try {
-        // Fetch all data in parallel for better performance
-        const schoolPromises = schools.map(async (school) => {
-          const [studentsRes, teachersRes, attendanceRes, ptoRes] = await Promise.all([
+        // First, fetch attendance summary which includes school data
+        const attendanceRes = await perfFetch(`/api/attendance/summary?date=${todayISO}`)
+        const attendanceData = await attendanceRes.json()
+
+        // Extract schools from attendance data
+        const schoolsFromData: School[] = (attendanceData?.schools || []).map((s: { school_id: string; school_name: string }) => ({
+          id: s.school_id,
+          name: s.school_name,
+          city: '',
+          state: '',
+          status: 'active',
+        }))
+
+        if (schoolsFromData.length === 0) {
+          setStatsLoading(false)
+          markDataReady()
+          return
+        }
+
+        setSchools(schoolsFromData)
+
+        // Now fetch additional data for each school
+        const schoolPromises = schoolsFromData.map(async (school: School) => {
+          const [studentsRes, teachersRes, ptoRes] = await Promise.all([
             perfFetch(`/api/students?school_id=${school.id}&status=enrolled`),
             perfFetch(`/api/staff?school_id=${school.id}&status=active`),
-            perfFetch(`/api/attendance/summary?date=${todayISO}&school_id=${school.id}`),
             perfFetch(`/api/pto?school_id=${school.id}&status=pending`),
           ])
 
-          const [students, teachers, attendanceData, ptoData] = await Promise.all([
+          const [students, teachers, ptoData] = await Promise.all([
             studentsRes.json(),
             teachersRes.json(),
-            attendanceRes.json(),
             ptoRes.json(),
           ])
+
+          // Get present count from attendance data
+          const schoolAttendance = attendanceData?.schools?.find((s: { school_id: string }) => s.school_id === school.id)
 
           return {
             schoolId: school.id,
             studentCount: Array.isArray(students) ? students.length : 0,
             teacherCount: Array.isArray(teachers) ? teachers.length : 0,
-            presentToday: attendanceData?.schools?.[0]?.present || 0,
+            presentToday: schoolAttendance?.present || 0,
             pendingPTO: Array.isArray(ptoData) ? ptoData.length : 0,
           }
         })
@@ -170,7 +187,7 @@ export function DashboardContent() {
       fetchStats()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schools, loading, todayISO])
+  }, [loading, todayISO])
 
   if (loading || statsLoading) {
     return (
@@ -184,8 +201,10 @@ export function DashboardContent() {
     return stats[schoolId] || { studentCount: 0, teacherCount: 0, presentToday: 0, pendingPTO: 0 }
   }
 
-  // Owner viewing all schools (stacked view)
-  if (isOwner && !currentSchool) {
+  // Multi-school view (if user has access to multiple schools and none is selected)
+  const showMultiSchoolView = !currentSchool && (isOwner || authSchools.length > 1 || schools.length > 1)
+
+  if (showMultiSchoolView && schools.length > 0) {
     return (
       <div className="p-8">
         {/* Header */}
@@ -284,7 +303,7 @@ export function DashboardContent() {
   }
 
   // Single school view (Director or Owner with school selected)
-  const school = currentSchool || schools[0]
+  const school = currentSchool || authSchools[0] || schools[0]
 
   if (!school) {
     return (
