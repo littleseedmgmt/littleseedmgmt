@@ -1,6 +1,8 @@
 'use client'
 
 import { useAuth } from '@/contexts/AuthContext'
+import { useComponentPerf } from '@/contexts/PerfContext'
+import { perfFetch } from '@/lib/perf'
 import { School } from '@/types/database'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
@@ -75,6 +77,7 @@ function SchoolCard({ school, stats, expanded = false }: { school: School; stats
 
 export function DashboardContent() {
   const { schools, currentSchool, isOwner, loading } = useAuth()
+  const { markDataReady } = useComponentPerf('DashboardContent')
   const [stats, setStats] = useState<StatsState>({})
   const [totals, setTotals] = useState<SchoolStats>({
     studentCount: 0,
@@ -97,6 +100,7 @@ export function DashboardContent() {
     async function fetchStats() {
       if (schools.length === 0) {
         setStatsLoading(false)
+        markDataReady()
         return
       }
 
@@ -104,10 +108,10 @@ export function DashboardContent() {
         // Fetch all data in parallel for better performance
         const schoolPromises = schools.map(async (school) => {
           const [studentsRes, teachersRes, attendanceRes, ptoRes] = await Promise.all([
-            fetch(`/api/students?school_id=${school.id}&status=enrolled`),
-            fetch(`/api/staff?school_id=${school.id}&status=active`),
-            fetch(`/api/attendance/summary?date=${todayISO}&school_id=${school.id}`),
-            fetch(`/api/pto?school_id=${school.id}&status=pending`),
+            perfFetch(`/api/students?school_id=${school.id}&status=enrolled`),
+            perfFetch(`/api/staff?school_id=${school.id}&status=active`),
+            perfFetch(`/api/attendance/summary?date=${todayISO}&school_id=${school.id}`),
+            perfFetch(`/api/pto?school_id=${school.id}&status=pending`),
           ])
 
           const [students, teachers, attendanceData, ptoData] = await Promise.all([
@@ -158,13 +162,14 @@ export function DashboardContent() {
         console.error('Error fetching dashboard stats:', error)
       } finally {
         setStatsLoading(false)
+        markDataReady()
       }
     }
 
     if (!loading) {
       fetchStats()
     }
-  }, [schools, loading, todayISO])
+  }, [schools, loading, todayISO, markDataReady])
 
   if (loading || statsLoading) {
     return (

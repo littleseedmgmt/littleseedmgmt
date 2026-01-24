@@ -31,7 +31,9 @@ export function PerfProvider({ children }: { children: ReactNode }) {
       setSummary(perfMonitor.getSummary())
     })
 
-    return unsubscribe
+    return () => {
+      unsubscribe()
+    }
   }, [])
 
   const enable = useCallback(() => {

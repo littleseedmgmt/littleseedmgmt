@@ -1,6 +1,8 @@
 'use client'
 
 import { useAuth } from '@/contexts/AuthContext'
+import { useComponentPerf } from '@/contexts/PerfContext'
+import { perfFetch } from '@/lib/perf'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
@@ -77,6 +79,7 @@ const ptoTypeLabels: Record<string, string> = {
 
 export default function StaffPage() {
   const { currentSchool, isOwner, schools, loading: authLoading } = useAuth()
+  const { markDataReady } = useComponentPerf('StaffPage')
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [pendingPTO, setPendingPTO] = useState<PTORequest[]>([])
   const [loading, setLoading] = useState(true)
@@ -108,8 +111,8 @@ export default function StaffPage() {
         }
 
         const [staffRes, ptoRes] = await Promise.all([
-          fetch(`/api/staff?${params}`),
-          fetch(`/api/pto?status=pending&${params}`)
+          perfFetch(`/api/staff?${params}`),
+          perfFetch(`/api/pto?status=pending&${params}`)
         ])
 
         if (staffRes.ok) {
@@ -125,11 +128,12 @@ export default function StaffPage() {
         console.error('Error fetching staff data:', error)
       } finally {
         setLoading(false)
+        markDataReady()
       }
     }
 
     fetchData()
-  }, [currentSchool, authLoading])
+  }, [currentSchool, authLoading, markDataReady])
 
   const handlePTOAction = async (ptoId: string, action: 'approved' | 'rejected') => {
     setProcessingPTO(ptoId)

@@ -1,6 +1,8 @@
 'use client'
 
 import { useAuth } from '@/contexts/AuthContext'
+import { useComponentPerf } from '@/contexts/PerfContext'
+import { perfFetch } from '@/lib/perf'
 import { useEffect, useState } from 'react'
 
 interface Student {
@@ -40,6 +42,7 @@ interface SchoolStudentStats {
 
 export default function StudentsPage() {
   const { currentSchool, isOwner, schools, loading: authLoading } = useAuth()
+  const { markDataReady } = useComponentPerf('StudentsPage')
   const [students, setStudents] = useState<Student[]>([])
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [loading, setLoading] = useState(true)
@@ -89,8 +92,8 @@ export default function StudentsPage() {
         }
 
         const [studentsRes, classroomsRes] = await Promise.all([
-          fetch(`/api/students?${params}`),
-          fetch(`/api/classrooms?${params}`)
+          perfFetch(`/api/students?${params}`),
+          perfFetch(`/api/classrooms?${params}`)
         ])
 
         if (studentsRes.ok) {
@@ -106,11 +109,12 @@ export default function StudentsPage() {
         console.error('Error fetching students:', error)
       } finally {
         setLoading(false)
+        markDataReady()
       }
     }
 
     fetchData()
-  }, [currentSchool, authLoading])
+  }, [currentSchool, authLoading, markDataReady])
 
   // Filter students
   const filteredStudents = students.filter(student => {

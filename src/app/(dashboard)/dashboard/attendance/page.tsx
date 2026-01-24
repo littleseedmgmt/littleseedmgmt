@@ -1,6 +1,8 @@
 'use client'
 
 import { useAuth } from '@/contexts/AuthContext'
+import { useComponentPerf } from '@/contexts/PerfContext'
+import { perfFetch } from '@/lib/perf'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { StudentCount, ScheduleChange, School } from '@/types/database'
@@ -60,6 +62,7 @@ interface ParsedSummary {
 
 export default function AttendancePage() {
   const { schools, currentSchool, isOwner, loading: authLoading } = useAuth()
+  const { markDataReady } = useComponentPerf('AttendancePage')
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0])
   const [summary, setSummary] = useState<AttendanceSummaryResponse | null>(null)
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
@@ -189,8 +192,8 @@ export default function AttendancePage() {
 
         // Fetch summary and classrooms in parallel
         const [summaryRes, classroomsRes] = await Promise.all([
-          fetch(`/api/attendance/summary?${params}`),
-          fetch(`/api/classrooms?${currentSchool ? `school_id=${currentSchool.id}` : ''}`)
+          perfFetch(`/api/attendance/summary?${params}`),
+          perfFetch(`/api/classrooms?${currentSchool ? `school_id=${currentSchool.id}` : ''}`)
         ])
 
         if (summaryRes.ok) {
@@ -206,11 +209,12 @@ export default function AttendancePage() {
         console.error('Error fetching attendance data:', error)
       } finally {
         setLoading(false)
+        markDataReady()
       }
     }
 
     fetchData()
-  }, [date, currentSchool, authLoading])
+  }, [date, currentSchool, authLoading, markDataReady])
 
   if (authLoading || loading) {
     return (
