@@ -90,14 +90,21 @@ export default function CalendarPage() {
   }
 
   useEffect(() => {
+    console.log('[Calendar] useEffect triggered:', { authLoading, schoolsCount: schools.length, currentSchool: currentSchool?.name })
+
     // Don't fetch until auth is ready
-    if (authLoading) return
+    if (authLoading) {
+      console.log('[Calendar] Waiting for auth...')
+      return
+    }
 
     const fetchSchedules = async () => {
       const schoolsToFetch = currentSchool ? [currentSchool] : schools
+      console.log('[Calendar] fetchSchedules called, schoolsToFetch:', schoolsToFetch.length)
 
       // If no schools available yet, stop loading
       if (!schoolsToFetch || schoolsToFetch.length === 0) {
+        console.log('[Calendar] No schools available, showing empty state')
         setSchedules([])
         setLoading(false)
         markDataReady()
@@ -127,22 +134,30 @@ export default function CalendarPage() {
               if (staffRes.ok) {
                 const staffData = await staffRes.json()
                 staff = Array.isArray(staffData) ? staffData : []
+              } else {
+                console.log(`[Calendar] Staff API returned ${staffRes.status} for school ${school.id}`)
               }
-            } catch { staff = [] }
+            } catch (e) { console.error('[Calendar] Error parsing staff:', e); staff = [] }
 
             try {
               if (shiftsRes.ok) {
                 const shiftsData = await shiftsRes.json()
                 shifts = Array.isArray(shiftsData) ? shiftsData : []
+              } else {
+                console.log(`[Calendar] Shifts API returned ${shiftsRes.status} for school ${school.id}`)
               }
-            } catch { shifts = [] }
+            } catch (e) { console.error('[Calendar] Error parsing shifts:', e); shifts = [] }
 
             try {
               if (classroomsRes.ok) {
                 const classroomsData = await classroomsRes.json()
                 classrooms = Array.isArray(classroomsData) ? classroomsData : []
+              } else {
+                console.log(`[Calendar] Classrooms API returned ${classroomsRes.status} for school ${school.id}`)
               }
-            } catch { classrooms = [] }
+            } catch (e) { console.error('[Calendar] Error parsing classrooms:', e); classrooms = [] }
+
+            console.log(`[Calendar] Data for school ${school.id}: staff=${staff.length}, shifts=${shifts.length}, classrooms=${classrooms.length}`)
 
             // Create a map of classroom IDs to names
             const classroomMap = new Map(classrooms.map(c => [c.id, c.name]))
@@ -246,11 +261,13 @@ export default function CalendarPage() {
         })
 
         const results = await Promise.all(schedulePromises)
+        console.log('[Calendar] Schedules fetched:', results.map(r => ({ school: r.school.name, staffCount: r.staff.length })))
         setSchedules(results)
       } catch (error) {
-        console.error('Error fetching schedules:', error)
+        console.error('[Calendar] Error fetching schedules:', error)
         setSchedules([])
       } finally {
+        console.log('[Calendar] Loading complete')
         setLoading(false)
         markDataReady()
       }
@@ -401,12 +418,8 @@ export default function CalendarPage() {
           <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          <p className="text-gray-500">No schedules for {dayOfWeek}, {dateDisplay}</p>
-          <p className="text-sm text-gray-400 mt-1">
-            {currentDate.getDay() === 0 || currentDate.getDay() === 6
-              ? 'Weekends typically have no scheduled shifts. Try a weekday.'
-              : 'Staff schedules will appear here once created.'}
-          </p>
+          <p className="text-gray-500">No schedules available</p>
+          <p className="text-sm text-gray-400 mt-1">Staff schedules will appear here once created</p>
         </div>
       )}
     </div>
