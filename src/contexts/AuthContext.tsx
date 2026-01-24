@@ -35,20 +35,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const supabase = createClient()
+    let isMounted = true
 
     // Get initial session
     const initAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        // Use getUser() for more reliable session validation
+        const { data: { user: authUser }, error } = await supabase.auth.getUser()
 
-        if (session?.user) {
-          setUser(session.user)
-          await fetchUserRoleAndSchools(session.user.id)
+        if (error) {
+          console.error('Auth error:', error)
+          if (isMounted) setLoading(false)
+          return
+        }
+
+        if (authUser && isMounted) {
+          setUser(authUser)
+          await fetchUserRoleAndSchools(authUser.id)
         }
       } catch (error) {
         console.error('Error initializing auth:', error)
       } finally {
-        setLoading(false)
+        if (isMounted) setLoading(false)
       }
     }
 
@@ -57,20 +65,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (session?.user) {
-          setUser(session.user)
-          await fetchUserRoleAndSchools(session.user.id)
-        } else {
+        if (!isMounted) return
+
+        if (event === 'SIGNED_OUT') {
           setUser(null)
           setUserRole(null)
           setSchools([])
           setCurrentSchool(null)
+          setLoading(false)
+          return
+        }
+
+        if (session?.user) {
+          setUser(session.user)
+          await fetchUserRoleAndSchools(session.user.id)
         }
         setLoading(false)
       }
     )
 
     return () => {
+      isMounted = false
       subscription.unsubscribe()
     }
   }, [])

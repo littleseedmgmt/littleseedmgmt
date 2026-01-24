@@ -5,6 +5,15 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { StudentCount, ScheduleChange, School } from '@/types/database'
 
+interface DirectorSummaryData {
+  student_counts: StudentCount[]
+  qualified_teachers: number
+  aides: number
+  teacher_absences: string[]
+  schedule_changes: { name: string; note: string }[]
+  updated_at: string
+}
+
 interface SchoolSummary {
   school_id: string
   school_name: string
@@ -16,6 +25,8 @@ interface SchoolSummary {
   excused: number
   not_recorded: number
   attendance_rate: number
+  data_source?: 'director_summary' | 'attendance_system'
+  director_summary?: DirectorSummaryData
 }
 
 interface AttendanceSummaryResponse {
@@ -276,32 +287,118 @@ export default function AttendancePage() {
 
       {/* Organization Totals (Owner viewing all) */}
       {isOwner && !currentSchool && summary && (
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-8">
-          <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-            <p className="text-3xl font-bold text-gray-900">{summary.totals.total_students}</p>
-            <p className="text-sm text-gray-500">Total Students</p>
+        <>
+          {/* Student Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+              <p className="text-3xl font-bold text-gray-900">{summary.totals.total_students}</p>
+              <p className="text-sm text-gray-500">Total Students</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+              <p className="text-3xl font-bold text-green-600">{summary.totals.present}</p>
+              <p className="text-sm text-gray-500">Present</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+              <p className="text-3xl font-bold text-amber-500">{summary.totals.late}</p>
+              <p className="text-sm text-gray-500">Late</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+              <p className="text-3xl font-bold text-red-500">{summary.totals.absent}</p>
+              <p className="text-sm text-gray-500">Absent</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+              <p className="text-3xl font-bold text-blue-500">{summary.totals.excused}</p>
+              <p className="text-sm text-gray-500">Excused</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+              <p className="text-3xl font-bold text-brand">{summary.totals.attendance_rate}%</p>
+              <p className="text-sm text-gray-500">Rate</p>
+            </div>
           </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-            <p className="text-3xl font-bold text-green-600">{summary.totals.present}</p>
-            <p className="text-sm text-gray-500">Present</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-            <p className="text-3xl font-bold text-amber-500">{summary.totals.late}</p>
-            <p className="text-sm text-gray-500">Late</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-            <p className="text-3xl font-bold text-red-500">{summary.totals.absent}</p>
-            <p className="text-sm text-gray-500">Absent</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-            <p className="text-3xl font-bold text-blue-500">{summary.totals.excused}</p>
-            <p className="text-sm text-gray-500">Excused</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-            <p className="text-3xl font-bold text-brand">{summary.totals.attendance_rate}%</p>
-            <p className="text-sm text-gray-500">Rate</p>
-          </div>
-        </div>
+
+          {/* Aggregated Staff Status */}
+          {(() => {
+            const allAbsences: { school: string; names: string[] }[] = []
+            const allScheduleChanges: { school: string; changes: { name: string; note: string }[] }[] = []
+            let totalQT = 0
+            let totalAides = 0
+
+            summary.schools.forEach((s) => {
+              if (s.director_summary) {
+                totalQT += s.director_summary.qualified_teachers
+                totalAides += s.director_summary.aides
+                if (s.director_summary.teacher_absences.length > 0) {
+                  allAbsences.push({ school: getShortName(s.school_name), names: s.director_summary.teacher_absences })
+                }
+                if (s.director_summary.schedule_changes.length > 0) {
+                  allScheduleChanges.push({ school: getShortName(s.school_name), changes: s.director_summary.schedule_changes })
+                }
+              }
+            })
+
+            const hasStaffData = totalQT > 0 || totalAides > 0 || allAbsences.length > 0 || allScheduleChanges.length > 0
+
+            if (!hasStaffData) return null
+
+            return (
+              <div className="bg-white rounded-xl border border-gray-200 p-4 mb-8">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  <h3 className="text-sm font-semibold text-gray-900">Staff Status Today</h3>
+                  {(totalQT > 0 || totalAides > 0) && (
+                    <span className="ml-auto text-sm text-gray-600">
+                      <span className="font-medium text-green-600">{totalQT + totalAides}</span> on duty
+                      <span className="text-gray-400 mx-1">|</span>
+                      {totalQT} QT, {totalAides} Aides
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-4">
+                  {/* Absences */}
+                  {allAbsences.length > 0 && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-medium text-red-600 uppercase whitespace-nowrap pt-0.5">Out:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {allAbsences.map((a, idx) => (
+                          a.names.map((name, nIdx) => (
+                            <span
+                              key={`${idx}-${nIdx}`}
+                              className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium"
+                            >
+                              {name} <span className="text-red-400">({a.school})</span>
+                            </span>
+                          ))
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Schedule Changes */}
+                  {allScheduleChanges.length > 0 && (
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-medium text-amber-600 uppercase whitespace-nowrap pt-0.5">Notes:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {allScheduleChanges.map((s, idx) => (
+                          s.changes.map((change, cIdx) => (
+                            <span
+                              key={`${idx}-${cIdx}`}
+                              className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium"
+                            >
+                              {change.name}: {change.note} <span className="text-amber-500">({s.school})</span>
+                            </span>
+                          ))
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+        </>
       )}
 
       {/* Schools Breakdown (for owner viewing all) or Single School View */}
@@ -375,6 +472,66 @@ export default function AttendancePage() {
                   ))}
                 </div>
               </div>
+
+              {/* Staff Status Section - Compact view from Director Summary */}
+              {schoolSummary.data_source === 'director_summary' && schoolSummary.director_summary && (
+                <div className="px-4 pb-4">
+                  <div className="border-t border-gray-100 pt-4">
+                    <div className="flex items-start gap-6 flex-wrap">
+                      {/* Staff On Duty */}
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
+                          <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {schoolSummary.director_summary.qualified_teachers + schoolSummary.director_summary.aides} Staff
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {schoolSummary.director_summary.qualified_teachers} QT, {schoolSummary.director_summary.aides} Aides
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Staff Absences */}
+                      {schoolSummary.director_summary.teacher_absences.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-gray-500 uppercase">Out:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {schoolSummary.director_summary.teacher_absences.map((name, idx) => (
+                              <span
+                                key={idx}
+                                className="px-2 py-0.5 bg-red-100 text-red-700 rounded text-xs font-medium"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Schedule Changes */}
+                      {schoolSummary.director_summary.schedule_changes.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-gray-500 uppercase">Notes:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {schoolSummary.director_summary.schedule_changes.map((change, idx) => (
+                              <span
+                                key={idx}
+                                className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium"
+                              >
+                                {change.name}: {change.note}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )

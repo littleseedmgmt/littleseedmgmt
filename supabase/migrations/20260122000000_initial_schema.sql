@@ -2,7 +2,6 @@
 -- Run this in your Supabase SQL Editor or via migrations
 
 -- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================
 -- ENUMS
@@ -23,7 +22,7 @@ CREATE TYPE approval_status AS ENUM ('pending', 'approved', 'rejected');
 
 -- Schools table (multi-tenant root)
 CREATE TABLE schools (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(255) NOT NULL,
   address TEXT,
   city VARCHAR(100),
@@ -50,7 +49,7 @@ CREATE TABLE users (
 
 -- User roles (maps users to schools with roles)
 CREATE TABLE user_roles (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
   role user_role NOT NULL,
@@ -60,7 +59,7 @@ CREATE TABLE user_roles (
 
 -- Teachers
 CREATE TABLE teachers (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   user_id UUID REFERENCES users(id),
   employee_id VARCHAR(50) UNIQUE,
@@ -78,7 +77,7 @@ CREATE TABLE teachers (
 
 -- Classrooms
 CREATE TABLE classrooms (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name VARCHAR(100) NOT NULL,
   age_group age_group NOT NULL,
@@ -92,7 +91,7 @@ CREATE TABLE classrooms (
 
 -- Students
 CREATE TABLE students (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   first_name VARCHAR(100) NOT NULL,
   last_name VARCHAR(100) NOT NULL,
@@ -118,7 +117,7 @@ CREATE TABLE students (
 
 -- Attendance
 CREATE TABLE attendance (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   date DATE NOT NULL,
@@ -134,7 +133,7 @@ CREATE TABLE attendance (
 
 -- Shifts
 CREATE TABLE shifts (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   teacher_id UUID NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
   classroom_id UUID REFERENCES classrooms(id),
@@ -151,7 +150,7 @@ CREATE TABLE shifts (
 
 -- PTO Requests
 CREATE TABLE pto_requests (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   teacher_id UUID NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
   start_date DATE NOT NULL,
@@ -168,7 +167,7 @@ CREATE TABLE pto_requests (
 
 -- Audit Logs
 CREATE TABLE audit_logs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   school_id UUID REFERENCES schools(id),
   user_id UUID REFERENCES users(id),
   action VARCHAR(50) NOT NULL,

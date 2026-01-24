@@ -3,6 +3,7 @@
 import { useAuth } from '@/contexts/AuthContext'
 import { School } from '@/types/database'
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 
 interface SchoolStats {
   studentCount: number
@@ -11,17 +12,11 @@ interface SchoolStats {
   pendingPTO: number
 }
 
-// Placeholder stats - will be replaced with real data
-const getSchoolStats = (_schoolId: string): SchoolStats => ({
-  studentCount: 0,
-  teacherCount: 0,
-  presentToday: 0,
-  pendingPTO: 0,
-})
+interface StatsState {
+  [schoolId: string]: SchoolStats
+}
 
-function SchoolCard({ school, expanded = false }: { school: School; expanded?: boolean }) {
-  const stats = getSchoolStats(school.id)
-
+function SchoolCard({ school, stats, expanded = false }: { school: School; stats: SchoolStats; expanded?: boolean }) {
   // Shorten school names for display
   const getShortName = (name: string) => {
     if (name === 'Peter Pan Mariner Square') return 'Mariner Square'
@@ -54,21 +49,21 @@ function SchoolCard({ school, expanded = false }: { school: School; expanded?: b
 
       <div className={`grid ${expanded ? 'grid-cols-4' : 'grid-cols-2'} gap-4`}>
         <div className="text-center p-3 bg-gray-50 rounded-lg">
-          <p className="text-2xl font-bold text-gray-900">{stats.studentCount || '—'}</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.studentCount}</p>
           <p className="text-sm text-gray-500">Students</p>
         </div>
         <div className="text-center p-3 bg-gray-50 rounded-lg">
-          <p className="text-2xl font-bold text-brand">{stats.presentToday || '—'}</p>
+          <p className="text-2xl font-bold text-brand">{stats.presentToday}</p>
           <p className="text-sm text-gray-500">Present</p>
         </div>
         {expanded && (
           <>
             <div className="text-center p-3 bg-gray-50 rounded-lg">
-              <p className="text-2xl font-bold text-gray-900">{stats.teacherCount || '—'}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.teacherCount}</p>
               <p className="text-sm text-gray-500">Teachers</p>
             </div>
             <div className="text-center p-3 bg-gray-50 rounded-lg">
-              <p className="text-2xl font-bold text-amber-500">{stats.pendingPTO || '—'}</p>
+              <p className="text-2xl font-bold text-amber-500">{stats.pendingPTO}</p>
               <p className="text-sm text-gray-500">Pending PTO</p>
             </div>
           </>
@@ -80,6 +75,14 @@ function SchoolCard({ school, expanded = false }: { school: School; expanded?: b
 
 export function DashboardContent() {
   const { schools, currentSchool, isOwner, loading } = useAuth()
+  const [stats, setStats] = useState<StatsState>({})
+  const [totals, setTotals] = useState<SchoolStats>({
+    studentCount: 0,
+    teacherCount: 0,
+    presentToday: 0,
+    pendingPTO: 0,
+  })
+  const [statsLoading, setStatsLoading] = useState(true)
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -88,12 +91,91 @@ export function DashboardContent() {
     day: "numeric",
   })
 
-  if (loading) {
+  const todayISO = new Date().toISOString().split('T')[0]
+
+  useEffect(() => {
+    async function fetchStats() {
+      if (schools.length === 0) {
+        setStatsLoading(false)
+        return
+      }
+
+      try {
+        // Fetch all data in parallel for better performance
+        const schoolPromises = schools.map(async (school) => {
+          const [studentsRes, teachersRes, attendanceRes, ptoRes] = await Promise.all([
+            fetch(`/api/students?school_id=${school.id}&status=enrolled`),
+            fetch(`/api/staff?school_id=${school.id}&status=active`),
+            fetch(`/api/attendance/summary?date=${todayISO}&school_id=${school.id}`),
+            fetch(`/api/pto?school_id=${school.id}&status=pending`),
+          ])
+
+          const [students, teachers, attendanceData, ptoData] = await Promise.all([
+            studentsRes.json(),
+            teachersRes.json(),
+            attendanceRes.json(),
+            ptoRes.json(),
+          ])
+
+          return {
+            schoolId: school.id,
+            studentCount: Array.isArray(students) ? students.length : 0,
+            teacherCount: Array.isArray(teachers) ? teachers.length : 0,
+            presentToday: attendanceData?.schools?.[0]?.present || 0,
+            pendingPTO: Array.isArray(ptoData) ? ptoData.length : 0,
+          }
+        })
+
+        const results = await Promise.all(schoolPromises)
+
+        const schoolStats: StatsState = {}
+        let totalStudents = 0
+        let totalPresent = 0
+        let totalTeachers = 0
+        let totalPendingPTO = 0
+
+        for (const result of results) {
+          schoolStats[result.schoolId] = {
+            studentCount: result.studentCount,
+            teacherCount: result.teacherCount,
+            presentToday: result.presentToday,
+            pendingPTO: result.pendingPTO,
+          }
+          totalStudents += result.studentCount
+          totalPresent += result.presentToday
+          totalTeachers += result.teacherCount
+          totalPendingPTO += result.pendingPTO
+        }
+
+        setStats(schoolStats)
+        setTotals({
+          studentCount: totalStudents,
+          teacherCount: totalTeachers,
+          presentToday: totalPresent,
+          pendingPTO: totalPendingPTO,
+        })
+      } catch (error) {
+        console.error('Error fetching dashboard stats:', error)
+      } finally {
+        setStatsLoading(false)
+      }
+    }
+
+    if (!loading) {
+      fetchStats()
+    }
+  }, [schools, loading, todayISO])
+
+  if (loading || statsLoading) {
     return (
       <div className="p-8 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div>
       </div>
     )
+  }
+
+  const getSchoolStats = (schoolId: string): SchoolStats => {
+    return stats[schoolId] || { studentCount: 0, teacherCount: 0, presentToday: 0, pendingPTO: 0 }
   }
 
   // Owner viewing all schools (stacked view)
@@ -110,22 +192,22 @@ export function DashboardContent() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <p className="text-sm text-gray-500 mb-1">Total Students</p>
-            <p className="text-4xl font-bold text-gray-900">—</p>
+            <p className="text-4xl font-bold text-gray-900">{totals.studentCount}</p>
             <p className="text-xs text-gray-400 mt-2">Across all schools</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <p className="text-sm text-gray-500 mb-1">Present Today</p>
-            <p className="text-4xl font-bold text-brand">—</p>
+            <p className="text-4xl font-bold text-brand">{totals.presentToday}</p>
             <p className="text-xs text-gray-400 mt-2">Organization-wide</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <p className="text-sm text-gray-500 mb-1">Teachers On Duty</p>
-            <p className="text-4xl font-bold text-gray-900">—</p>
+            <p className="text-4xl font-bold text-gray-900">{totals.teacherCount}</p>
             <p className="text-xs text-gray-400 mt-2">Active today</p>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <p className="text-sm text-gray-500 mb-1">Pending PTO</p>
-            <p className="text-4xl font-bold text-amber-500">—</p>
+            <p className="text-4xl font-bold text-amber-500">{totals.pendingPTO}</p>
             <p className="text-xs text-gray-400 mt-2">Awaiting approval</p>
           </div>
         </div>
@@ -134,7 +216,7 @@ export function DashboardContent() {
         <div className="space-y-6">
           <h2 className="text-xl font-semibold text-gray-900">Schools Overview</h2>
           {schools.map((school) => (
-            <SchoolCard key={school.id} school={school} expanded />
+            <SchoolCard key={school.id} school={school} stats={getSchoolStats(school.id)} expanded />
           ))}
         </div>
 
@@ -206,6 +288,8 @@ export function DashboardContent() {
     )
   }
 
+  const schoolStats = getSchoolStats(school.id)
+
   return (
     <div className="p-8">
       {/* Header */}
@@ -218,22 +302,22 @@ export function DashboardContent() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <p className="text-sm text-gray-500 mb-1">Total Students</p>
-          <p className="text-4xl font-bold text-gray-900">—</p>
+          <p className="text-4xl font-bold text-gray-900">{schoolStats.studentCount}</p>
           <p className="text-xs text-gray-400 mt-2">Enrolled</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <p className="text-sm text-gray-500 mb-1">Present Today</p>
-          <p className="text-4xl font-bold text-brand">—</p>
+          <p className="text-4xl font-bold text-brand">{schoolStats.presentToday}</p>
           <p className="text-xs text-gray-400 mt-2">Checked in</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <p className="text-sm text-gray-500 mb-1">Teachers On Duty</p>
-          <p className="text-4xl font-bold text-gray-900">—</p>
+          <p className="text-4xl font-bold text-gray-900">{schoolStats.teacherCount}</p>
           <p className="text-xs text-gray-400 mt-2">Active today</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <p className="text-sm text-gray-500 mb-1">Pending PTO</p>
-          <p className="text-4xl font-bold text-amber-500">—</p>
+          <p className="text-4xl font-bold text-amber-500">{schoolStats.pendingPTO}</p>
           <p className="text-xs text-gray-400 mt-2">Awaiting approval</p>
         </div>
       </div>
