@@ -41,6 +41,15 @@ interface PTORequest {
   school: { id: string; name: string }
 }
 
+interface SchoolStaffStats {
+  school: { id: string; name: string }
+  total: number
+  active: number
+  onLeave: number
+  teachers: Teacher[]
+  pendingPTO: number
+}
+
 const roleLabels: Record<string, string> = {
   director: 'Director',
   assistant_director: 'Asst. Director',
@@ -67,11 +76,12 @@ const ptoTypeLabels: Record<string, string> = {
 }
 
 export default function StaffPage() {
-  const { schools, currentSchool, isOwner, loading: authLoading } = useAuth()
+  const { currentSchool, isOwner, loading: authLoading } = useAuth()
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [pendingPTO, setPendingPTO] = useState<PTORequest[]>([])
   const [loading, setLoading] = useState(true)
   const [processingPTO, setProcessingPTO] = useState<string | null>(null)
+  const [expandedSchool, setExpandedSchool] = useState<string | null>(null)
 
   const getShortName = (name: string) => {
     if (name === 'Peter Pan Mariner Square') return 'Mariner Square'
@@ -142,20 +152,29 @@ export default function StaffPage() {
     )
   }
 
-  // Group teachers by school for owner view
-  const teachersBySchool = teachers.reduce((acc, teacher) => {
-    const schoolId = teacher.school_id
-    if (!acc[schoolId]) {
-      acc[schoolId] = {
-        school: teacher.school,
-        teachers: []
+  // Group teachers by school with stats
+  const schoolStats: SchoolStaffStats[] = Object.values(
+    teachers.reduce((acc, teacher) => {
+      const schoolId = teacher.school_id
+      if (!acc[schoolId]) {
+        acc[schoolId] = {
+          school: teacher.school,
+          total: 0,
+          active: 0,
+          onLeave: 0,
+          teachers: [],
+          pendingPTO: pendingPTO.filter(p => p.school_id === schoolId).length
+        }
       }
-    }
-    acc[schoolId].teachers.push(teacher)
-    return acc
-  }, {} as Record<string, { school: { id: string; name: string }; teachers: Teacher[] }>)
+      acc[schoolId].total++
+      if (teacher.status === 'active') acc[schoolId].active++
+      if (teacher.status === 'on_leave') acc[schoolId].onLeave++
+      acc[schoolId].teachers.push(teacher)
+      return acc
+    }, {} as Record<string, SchoolStaffStats>)
+  )
 
-  // Stats
+  // Stats totals
   const activeTeachers = teachers.filter(t => t.status === 'active').length
   const onLeave = teachers.filter(t => t.status === 'on_leave').length
 
@@ -171,7 +190,7 @@ export default function StaffPage() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Aggregate Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
           <p className="text-3xl font-bold text-gray-900">{teachers.length}</p>
@@ -243,62 +262,145 @@ export default function StaffPage() {
         </div>
       )}
 
-      {/* Staff Directory */}
-      {Object.values(teachersBySchool).map(({ school, teachers: schoolTeachers }) => (
-        <div key={school.id} className="mb-8">
-          {(isOwner && !currentSchool) && (
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center">
-                <svg className="w-4 h-4 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-semibold text-gray-900">{getShortName(school.name)}</h2>
-              <span className="text-sm text-gray-500">({schoolTeachers.length} staff)</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {schoolTeachers.map((teacher) => (
-              <Link
-                key={teacher.id}
-                href={`/dashboard/staff/${teacher.id}`}
-                className="bg-white rounded-xl border border-gray-200 p-4 hover:border-brand transition-colors"
+      {/* School Cards (for owner viewing all schools) */}
+      {isOwner && !currentSchool && schoolStats.length > 0 && (
+        <div className="space-y-4 mb-8">
+          <h2 className="text-xl font-semibold text-gray-900">Schools Overview</h2>
+          {schoolStats.map(({ school, total, active, onLeave: schoolOnLeave, teachers: schoolTeachers, pendingPTO: schoolPendingPTO }) => (
+            <div key={school.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              {/* School Header - Clickable */}
+              <button
+                onClick={() => setExpandedSchool(expandedSchool === school.id ? null : school.id)}
+                className="w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
               >
-                <div className="flex items-start gap-4">
-                  <div className="w-16 h-16 rounded-full bg-brand/10 flex items-center justify-center text-brand text-xl font-medium flex-shrink-0">
-                    {teacher.photo_url ? (
-                      <img
-                        src={teacher.photo_url}
-                        alt={`${teacher.first_name} ${teacher.last_name}`}
-                        className="w-full h-full rounded-full object-cover"
-                      />
-                    ) : (
-                      `${teacher.first_name[0]}${teacher.last_name[0]}`
-                    )}
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-brand/10 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-900 truncate">
-                      {teacher.first_name} {teacher.last_name}
-                    </p>
-                    <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full mt-1 ${roleColors[teacher.role] || 'bg-gray-100 text-gray-700'}`}>
-                      {roleLabels[teacher.role] || teacher.role}
-                    </span>
-                    {teacher.classroom_title && (
-                      <p className="text-sm text-gray-500 mt-1 truncate">{teacher.classroom_title}</p>
-                    )}
-                    {teacher.regular_shift_start && teacher.regular_shift_end && (
-                      <p className="text-xs text-gray-400 mt-1">
-                        {teacher.regular_shift_start.slice(0, 5)} - {teacher.regular_shift_end.slice(0, 5)}
-                      </p>
-                    )}
+                  <div className="text-left">
+                    <h3 className="text-lg font-semibold text-gray-900">{getShortName(school.name)}</h3>
+                    <p className="text-sm text-gray-500">{total} staff</p>
                   </div>
                 </div>
-              </Link>
-            ))}
-          </div>
+
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-gray-900">{total}</p>
+                      <p className="text-xs text-gray-500">Total</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-green-600">{active}</p>
+                      <p className="text-xs text-gray-500">Active</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-amber-500">{schoolOnLeave}</p>
+                      <p className="text-xs text-gray-500">On Leave</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-red-500">{schoolPendingPTO}</p>
+                      <p className="text-xs text-gray-500">Pending PTO</p>
+                    </div>
+                  </div>
+                  <svg
+                    className={`w-5 h-5 text-gray-400 transition-transform ${expandedSchool === school.id ? 'rotate-180' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+
+              {/* Expanded Staff Grid */}
+              {expandedSchool === school.id && (
+                <div className="border-t border-gray-200 p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {schoolTeachers.map((teacher) => (
+                      <Link
+                        key={teacher.id}
+                        href={`/dashboard/staff/${teacher.id}`}
+                        className="bg-gray-50 rounded-xl border border-gray-200 p-4 hover:border-brand transition-colors"
+                      >
+                        <div className="flex items-start gap-4">
+                          <div className="w-14 h-14 rounded-full bg-brand/10 flex items-center justify-center text-brand text-lg font-medium flex-shrink-0">
+                            {teacher.photo_url ? (
+                              <img
+                                src={teacher.photo_url}
+                                alt={`${teacher.first_name} ${teacher.last_name}`}
+                                className="w-full h-full rounded-full object-cover"
+                              />
+                            ) : (
+                              `${teacher.first_name[0]}${teacher.last_name[0]}`
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">
+                              {teacher.first_name} {teacher.last_name}
+                            </p>
+                            <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full mt-1 ${roleColors[teacher.role] || 'bg-gray-100 text-gray-700'}`}>
+                              {roleLabels[teacher.role] || teacher.role}
+                            </span>
+                            {teacher.classroom_title && (
+                              <p className="text-sm text-gray-500 mt-1 truncate">{teacher.classroom_title}</p>
+                            )}
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
-      ))}
+      )}
+
+      {/* Single School View (Director or Owner with school selected) */}
+      {(!isOwner || currentSchool) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {teachers.map((teacher) => (
+            <Link
+              key={teacher.id}
+              href={`/dashboard/staff/${teacher.id}`}
+              className="bg-white rounded-xl border border-gray-200 p-4 hover:border-brand transition-colors"
+            >
+              <div className="flex items-start gap-4">
+                <div className="w-16 h-16 rounded-full bg-brand/10 flex items-center justify-center text-brand text-xl font-medium flex-shrink-0">
+                  {teacher.photo_url ? (
+                    <img
+                      src={teacher.photo_url}
+                      alt={`${teacher.first_name} ${teacher.last_name}`}
+                      className="w-full h-full rounded-full object-cover"
+                    />
+                  ) : (
+                    `${teacher.first_name[0]}${teacher.last_name[0]}`
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 truncate">
+                    {teacher.first_name} {teacher.last_name}
+                  </p>
+                  <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full mt-1 ${roleColors[teacher.role] || 'bg-gray-100 text-gray-700'}`}>
+                    {roleLabels[teacher.role] || teacher.role}
+                  </span>
+                  {teacher.classroom_title && (
+                    <p className="text-sm text-gray-500 mt-1 truncate">{teacher.classroom_title}</p>
+                  )}
+                  {teacher.regular_shift_start && teacher.regular_shift_end && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      {teacher.regular_shift_start.slice(0, 5)} - {teacher.regular_shift_end.slice(0, 5)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {/* Empty State */}
       {teachers.length === 0 && (
