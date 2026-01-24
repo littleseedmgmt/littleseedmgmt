@@ -418,9 +418,9 @@ export default function AttendancePage() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand/50"
                 >
                   <option value="">Select a school...</option>
-                  {schools.map((school: School) => (
-                    <option key={school.id} value={school.id}>
-                      {school.name}
+                  {summary?.schools.map((school) => (
+                    <option key={school.school_id} value={school.school_id}>
+                      {school.school_name}
                     </option>
                   ))}
                 </select>
