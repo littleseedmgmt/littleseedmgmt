@@ -77,14 +77,17 @@ const ptoTypeLabels: Record<string, string> = {
 
 export default function StaffPage() {
   const { currentSchool, isOwner, schools, loading: authLoading } = useAuth()
-
-  // Show multi-school view if user has access to multiple schools and none is selected
-  const showMultiSchoolView = (isOwner || schools.length > 1) && !currentSchool
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [pendingPTO, setPendingPTO] = useState<PTORequest[]>([])
   const [loading, setLoading] = useState(true)
   const [processingPTO, setProcessingPTO] = useState<string | null>(null)
   const [expandedSchool, setExpandedSchool] = useState<string | null>(null)
+
+  // Count unique schools from fetched staff data
+  const uniqueSchoolIds = new Set(teachers.map(t => t.school_id))
+
+  // Show multi-school view if user has data from multiple schools and none is selected
+  const showMultiSchoolView = !currentSchool && (isOwner || schools.length > 1 || uniqueSchoolIds.size > 1)
 
   const getShortName = (name: string) => {
     if (name === 'Peter Pan Mariner Square') return 'Mariner Square'

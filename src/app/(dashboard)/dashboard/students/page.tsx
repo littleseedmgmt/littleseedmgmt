@@ -40,15 +40,18 @@ interface SchoolStudentStats {
 
 export default function StudentsPage() {
   const { currentSchool, isOwner, schools, loading: authLoading } = useAuth()
-
-  // Show multi-school view if user has access to multiple schools and none is selected
-  const showMultiSchoolView = (isOwner || schools.length > 1) && !currentSchool
   const [students, setStudents] = useState<Student[]>([])
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedClassroom, setSelectedClassroom] = useState<string>('')
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedSchool, setExpandedSchool] = useState<string | null>(null)
+
+  // Count unique schools from fetched student data
+  const uniqueSchoolIds = new Set(students.map(s => s.school_id))
+
+  // Show multi-school view if user has data from multiple schools and none is selected
+  const showMultiSchoolView = !currentSchool && (isOwner || schools.length > 1 || uniqueSchoolIds.size > 1)
 
   const getShortName = (name: string) => {
     if (name === 'Peter Pan Mariner Square') return 'Mariner Square'
