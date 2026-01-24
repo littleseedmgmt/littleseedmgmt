@@ -1,7 +1,22 @@
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+
 const prodUrl = process.env.NEXT_PUBLIC_PROD_URL || 'https://app.littleseedmgmt.com'
 const testUrl = process.env.NEXT_PUBLIC_TEST_URL || 'https://test.littleseedmgmt.com'
 
 export default function Home() {
+  const router = useRouter()
+
+  useEffect(() => {
+    // If we're on a subdomain (app.* or test.*), redirect to login
+    const hostname = window.location.hostname
+    if (hostname.startsWith('app.') || hostname.startsWith('test.')) {
+      router.replace('/login')
+    }
+  }, [router])
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
