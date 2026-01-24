@@ -142,6 +142,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUserRole(null)
     setSchools([])
     setCurrentSchool(null)
+    // Redirect to login page
+    window.location.href = '/login'
   }
 
   const isOwner = userRole === 'super_admin'
