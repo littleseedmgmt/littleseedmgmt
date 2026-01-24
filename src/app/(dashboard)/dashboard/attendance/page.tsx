@@ -139,10 +139,20 @@ export default function AttendancePage() {
       }
 
       setParsedSummary({ ...data, saved: true })
-      // Close modal after short delay to show success
-      setTimeout(() => {
+      // Close modal after short delay to show success, then refresh data
+      setTimeout(async () => {
         setShowImportModal(false)
         resetImportModal()
+        // Refresh attendance data to show updated summary
+        const params = new URLSearchParams({ date })
+        if (currentSchool) {
+          params.set('school_id', currentSchool.id)
+        }
+        const summaryRes = await fetch(`/api/attendance/summary?${params}`)
+        if (summaryRes.ok) {
+          const summaryData = await summaryRes.json()
+          setSummary(summaryData)
+        }
       }, 1500)
     } catch (error) {
       setImportError(error instanceof Error ? error.message : 'Failed to save summary')
@@ -159,16 +169,36 @@ export default function AttendancePage() {
     setImportError('')
   }
 
-  const openImportModal = () => {
+  const openImportModal = (schoolId?: string) => {
     resetImportModal()
-    // Pre-select current school if viewing a specific school
-    if (currentSchool) {
+    // Pre-select specified school, or current school if viewing a specific school
+    if (schoolId) {
+      setImportSchoolId(schoolId)
+    } else if (currentSchool) {
       setImportSchoolId(currentSchool.id)
     } else if (schools.length === 1) {
       setImportSchoolId(schools[0].id)
     }
     setImportDate(date) // Use the currently selected date
     setShowImportModal(true)
+  }
+
+  const formatLastUpdate = (timestamp: string) => {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+
+    if (diffMins < 1) return 'just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })
   }
 
   const getShortName = (name: string) => {
@@ -235,18 +265,8 @@ export default function AttendancePage() {
           </p>
         </div>
 
-        {/* Date Picker and Import Button */}
+        {/* Date Picker */}
         <div className="flex items-center gap-4">
-          <button
-            onClick={openImportModal}
-            className="px-4 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand/90 flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-            Import Director Summary
-          </button>
-
           <button
             onClick={() => {
               const d = new Date(date)
@@ -414,19 +434,39 @@ export default function AttendancePage() {
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               {/* School Header */}
               <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-brand/10 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-brand/10 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900">
+                        {getShortName(schoolSummary.school_name)}
+                      </h2>
+                      <p className="text-sm text-gray-500">
+                        {schoolSummary.total_students} students
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900">
-                      {getShortName(schoolSummary.school_name)}
-                    </h2>
-                    <p className="text-sm text-gray-500">
-                      {schoolSummary.total_students} students
-                    </p>
+
+                  {/* Import/Update Director Summary Button */}
+                  <div className="flex items-center gap-2 ml-4">
+                    <button
+                      onClick={() => openImportModal(schoolSummary.school_id)}
+                      className="px-3 py-1.5 text-xs font-medium text-brand border border-brand/30 rounded-lg hover:bg-brand/5 flex items-center gap-1.5"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                      {schoolSummary.director_summary ? 'Update' : 'Import'}
+                    </button>
+                    {schoolSummary.director_summary && (
+                      <span className="text-xs text-gray-400">
+                        {formatLastUpdate(schoolSummary.director_summary.updated_at)}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -557,7 +597,18 @@ export default function AttendancePage() {
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Import Director Summary</h2>
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  {importSchoolId
+                    ? `Director Summary - ${getShortName(summary?.schools.find(s => s.school_id === importSchoolId)?.school_name || '')}`
+                    : 'Import Director Summary'}
+                </h2>
+                {importSchoolId && (
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    Paste the WhatsApp message from the director
+                  </p>
+                )}
+              </div>
               <button
                 onClick={() => setShowImportModal(false)}
                 className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
@@ -570,22 +621,24 @@ export default function AttendancePage() {
 
             {/* Modal Body */}
             <div className="p-4 space-y-4">
-              {/* School Selector */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">School</label>
-                <select
-                  value={importSchoolId}
-                  onChange={(e) => setImportSchoolId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand/50"
-                >
-                  <option value="">Select a school...</option>
-                  {summary?.schools.map((school) => (
-                    <option key={school.school_id} value={school.school_id}>
-                      {school.school_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* School Selector - only show if no school pre-selected */}
+              {!importSchoolId && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">School</label>
+                  <select
+                    value={importSchoolId}
+                    onChange={(e) => setImportSchoolId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand/50"
+                  >
+                    <option value="">Select a school...</option>
+                    {summary?.schools.map((school) => (
+                      <option key={school.school_id} value={school.school_id}>
+                        {school.school_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Date Picker */}
               <div>

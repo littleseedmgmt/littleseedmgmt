@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { timeQuery, logApiPerf } from '@/lib/api-perf'
 import { NextRequest, NextResponse } from 'next/server'
 
 interface SchoolRecord {
@@ -29,9 +30,13 @@ interface DirectorSummaryRecord {
 
 // GET /api/attendance/summary - Get attendance summary for a date
 export async function GET(request: NextRequest) {
+  const apiStart = performance.now()
+
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user } } = await timeQuery('auth.getUser', () =>
+      supabase.auth.getUser()
+    )
 
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -48,7 +53,10 @@ export async function GET(request: NextRequest) {
       schoolsQuery = schoolsQuery.eq('id', schoolId)
     }
 
-    const { data: schoolsData, error: schoolsError } = await schoolsQuery
+    const { data: schoolsData, error: schoolsError } = await timeQuery('schools.select', async () => {
+      const result = await schoolsQuery
+      return result
+    })
 
     if (schoolsError) {
       return NextResponse.json({ error: schoolsError.message }, { status: 500 })
@@ -59,11 +67,14 @@ export async function GET(request: NextRequest) {
     // Fetch all director summaries for the date in one query
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabaseAny = supabase as any
-    const { data: directorSummaries } = await supabaseAny
-      .from('director_daily_summaries')
-      .select('*')
-      .eq('date', date)
-      .in('school_id', schools.map(s => s.id))
+    const { data: directorSummaries } = await timeQuery('director_summaries.select', async () => {
+      const result = await supabaseAny
+        .from('director_daily_summaries')
+        .select('*')
+        .eq('date', date)
+        .in('school_id', schools.map(s => s.id))
+      return result
+    })
 
     const summariesMap = new Map<string, DirectorSummaryRecord>()
     if (directorSummaries) {
@@ -78,19 +89,28 @@ export async function GET(request: NextRequest) {
         // Check if director summary exists for this school+date
         const directorSummary = summariesMap.get(school.id)
 
-        // Get total enrolled students (always from system)
-        const { count: totalStudents } = await supabase
-          .from('students')
-          .select('*', { count: 'exact', head: true })
-          .eq('school_id', school.id)
-          .eq('status', 'enrolled')
+        // Get both queries in parallel for this school
+        const [studentResult, attendanceResult] = await Promise.all([
+          timeQuery(`students.count(${school.name})`, async () => {
+            const result = await supabase
+              .from('students')
+              .select('*', { count: 'exact', head: true })
+              .eq('school_id', school.id)
+              .eq('status', 'enrolled')
+            return result
+          }),
+          timeQuery(`attendance.select(${school.name})`, async () => {
+            const result = await supabase
+              .from('attendance')
+              .select('status')
+              .eq('school_id', school.id)
+              .eq('date', date)
+            return result
+          }),
+        ])
 
-        // Get attendance records for the date (system data)
-        const { data: attendanceData } = await supabase
-          .from('attendance')
-          .select('status')
-          .eq('school_id', school.id)
-          .eq('date', date)
+        const { count: totalStudents } = studentResult
+        const { data: attendanceData } = attendanceResult
 
         const attendance = (attendanceData || []) as AttendanceRecord[]
         const systemPresent = attendance.filter(a => a.status === 'present').length
@@ -175,7 +195,7 @@ export async function GET(request: NextRequest) {
       ? Math.round(((totals.present + totals.late) / totals.total_students) * 100)
       : 0
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       date,
       schools: summaries,
       totals: {
@@ -183,8 +203,26 @@ export async function GET(request: NextRequest) {
         attendance_rate: totalAttendanceRate,
       },
     })
+
+    // Log total API time
+    logApiPerf({
+      route: '/api/attendance/summary',
+      method: 'GET',
+      duration: performance.now() - apiStart,
+      status: 200,
+      timestamp: new Date().toISOString(),
+    })
+
+    return response
   } catch (error) {
     console.error('Error in GET /api/attendance/summary:', error)
+    logApiPerf({
+      route: '/api/attendance/summary',
+      method: 'GET',
+      duration: performance.now() - apiStart,
+      status: 500,
+      timestamp: new Date().toISOString(),
+    })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

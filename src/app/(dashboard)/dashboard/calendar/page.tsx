@@ -1,6 +1,8 @@
 'use client'
 
 import { useAuth } from '@/contexts/AuthContext'
+import { useComponentPerf } from '@/contexts/PerfContext'
+import { perfFetch } from '@/lib/perf'
 import { School } from '@/types/database'
 import { useEffect, useState } from 'react'
 
@@ -48,6 +50,7 @@ type DayViewMode = 'schedule' | 'timeline'
 
 export default function CalendarPage() {
   const { schools, currentSchool, isOwner, loading: authLoading } = useAuth()
+  const { markDataReady } = useComponentPerf('CalendarPage')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<'day' | 'week'>('day')
   const [dayViewMode, setDayViewMode] = useState<DayViewMode>('timeline')
@@ -87,28 +90,18 @@ export default function CalendarPage() {
   }
 
   useEffect(() => {
-    console.log('useEffect triggered:', { authLoading, schoolsLength: schools?.length, currentSchool: currentSchool?.name })
-
     const fetchSchedules = async () => {
-      console.log('fetchSchedules called, authLoading:', authLoading)
-      if (authLoading) {
-        console.log('Returning early due to authLoading')
-        return
-      }
-
       const schoolsToFetch = currentSchool ? [currentSchool] : schools
-      console.log('Schools to fetch:', schoolsToFetch?.length)
 
-      // If no schools available yet, don't show loading forever
+      // If no schools available yet, stop loading
       if (!schoolsToFetch || schoolsToFetch.length === 0) {
-        console.log('No schools to fetch, setting loading false')
         setSchedules([])
         setLoading(false)
+        markDataReady()
         return
       }
 
       setLoading(true)
-      console.log('Starting to fetch schedules...')
 
       try {
         const dateStr = formatDate(currentDate)
@@ -117,9 +110,9 @@ export default function CalendarPage() {
           try {
             // Fetch staff and shifts for this school
             const [staffRes, shiftsRes, classroomsRes] = await Promise.all([
-              fetch(`/api/staff?school_id=${school.id}&status=active`),
-              fetch(`/api/staff/shifts?school_id=${school.id}&start_date=${dateStr}&end_date=${dateStr}`),
-              fetch(`/api/classrooms?school_id=${school.id}`)
+              perfFetch(`/api/staff?school_id=${school.id}&status=active`),
+              perfFetch(`/api/staff/shifts?school_id=${school.id}&start_date=${dateStr}&end_date=${dateStr}`),
+              perfFetch(`/api/classrooms?school_id=${school.id}`)
             ])
 
             // Parse responses defensively
@@ -250,34 +243,27 @@ export default function CalendarPage() {
         })
 
         const results = await Promise.all(schedulePromises)
-        console.log('Fetch complete, results:', results.length)
         setSchedules(results)
       } catch (error) {
         console.error('Error fetching schedules:', error)
         setSchedules([])
       } finally {
-        console.log('Setting loading to false')
         setLoading(false)
+        markDataReady()
       }
     }
 
     fetchSchedules()
-  }, [currentDate, currentSchool, schools, authLoading])
+  }, [currentDate, currentSchool, schools, markDataReady])
 
   const dayOfWeek = DAYS_OF_WEEK[currentDate.getDay()]
   const dateDisplay = `${MONTHS[currentDate.getMonth()]} ${currentDate.getDate()}, ${currentDate.getFullYear()}`
   const isToday = formatDate(currentDate) === formatDate(new Date())
 
-  // Debug logging
-  console.log('Calendar render:', { authLoading, loading, schoolsCount: schools?.length, currentSchool: currentSchool?.name })
-
   if (authLoading || loading) {
     return (
       <div className="p-8 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div>
-        <span className="ml-2 text-gray-500 text-sm">
-          {authLoading ? 'Loading auth...' : 'Loading schedules...'}
-        </span>
       </div>
     )
   }
