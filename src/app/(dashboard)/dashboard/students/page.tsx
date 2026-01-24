@@ -39,7 +39,10 @@ interface SchoolStudentStats {
 }
 
 export default function StudentsPage() {
-  const { currentSchool, isOwner, loading: authLoading } = useAuth()
+  const { currentSchool, isOwner, schools, loading: authLoading } = useAuth()
+
+  // Show multi-school view if user has access to multiple schools and none is selected
+  const showMultiSchoolView = (isOwner || schools.length > 1) && !currentSchool
   const [students, setStudents] = useState<Student[]>([])
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [loading, setLoading] = useState(true)
@@ -161,7 +164,7 @@ export default function StudentsPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Students</h1>
           <p className="text-gray-500 mt-1">
-            {isOwner && !currentSchool ? 'All Schools' : currentSchool?.name || 'Select a school'}
+            {showMultiSchoolView ? 'All Schools' : currentSchool?.name || 'Select a school'}
           </p>
         </div>
       </div>
@@ -192,7 +195,7 @@ export default function StudentsPage() {
       </div>
 
       {/* Aggregate Stats (for owner viewing all schools) */}
-      {isOwner && !currentSchool && (
+      {showMultiSchoolView && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
             <p className="text-3xl font-bold text-gray-900">{totals.total}</p>
@@ -214,7 +217,7 @@ export default function StudentsPage() {
       )}
 
       {/* School Cards (for owner viewing all schools) */}
-      {isOwner && !currentSchool && schoolStats.length > 0 && (
+      {showMultiSchoolView && schoolStats.length > 0 && (
         <div className="space-y-4 mb-8">
           <h2 className="text-xl font-semibold text-gray-900">Schools Overview</h2>
           {schoolStats.map(({ school, total, enrolled, onLeave, withdrawn, students: schoolStudents }) => (
@@ -337,7 +340,7 @@ export default function StudentsPage() {
       )}
 
       {/* Single School View (Director or Owner with school selected) */}
-      {(!isOwner || currentSchool) && (
+      {!showMultiSchoolView && (
         <>
           {/* Stats for single school */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -432,7 +435,7 @@ export default function StudentsPage() {
       )}
 
       {/* Empty State */}
-      {filteredStudents.length === 0 && isOwner && !currentSchool && (
+      {filteredStudents.length === 0 && showMultiSchoolView && (
         <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
           <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />

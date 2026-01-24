@@ -76,7 +76,10 @@ const ptoTypeLabels: Record<string, string> = {
 }
 
 export default function StaffPage() {
-  const { currentSchool, isOwner, loading: authLoading } = useAuth()
+  const { currentSchool, isOwner, schools, loading: authLoading } = useAuth()
+
+  // Show multi-school view if user has access to multiple schools and none is selected
+  const showMultiSchoolView = (isOwner || schools.length > 1) && !currentSchool
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [pendingPTO, setPendingPTO] = useState<PTORequest[]>([])
   const [loading, setLoading] = useState(true)
@@ -185,7 +188,7 @@ export default function StaffPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Staff</h1>
           <p className="text-gray-500 mt-1">
-            {isOwner && !currentSchool ? 'All Schools' : currentSchool?.name || 'Select a school'}
+            {showMultiSchoolView ? 'All Schools' : currentSchool?.name || 'Select a school'}
           </p>
         </div>
       </div>
@@ -263,7 +266,7 @@ export default function StaffPage() {
       )}
 
       {/* School Cards (for owner viewing all schools) */}
-      {isOwner && !currentSchool && schoolStats.length > 0 && (
+      {showMultiSchoolView && schoolStats.length > 0 && (
         <div className="space-y-4 mb-8">
           <h2 className="text-xl font-semibold text-gray-900">Schools Overview</h2>
           {schoolStats.map(({ school, total, active, onLeave: schoolOnLeave, teachers: schoolTeachers, pendingPTO: schoolPendingPTO }) => (
@@ -360,7 +363,7 @@ export default function StaffPage() {
       )}
 
       {/* Single School View (Director or Owner with school selected) */}
-      {(!isOwner || currentSchool) && (
+      {!showMultiSchoolView && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {teachers.map((teacher) => (
             <Link
