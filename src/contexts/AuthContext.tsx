@@ -40,21 +40,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Get initial session
     const initAuth = async () => {
       try {
-        // Use getUser() for more reliable session validation
-        const { data: { user: authUser }, error } = await supabase.auth.getUser()
+        // Use getSession first, then getUser for validation
+        const { data: { session } } = await supabase.auth.getSession()
 
-        if (error) {
-          console.error('Auth error:', error)
-          if (isMounted) setLoading(false)
-          return
-        }
-
-        if (authUser && isMounted) {
-          setUser(authUser)
-          await fetchUserRoleAndSchools(authUser.id)
+        if (session?.user && isMounted) {
+          setUser(session.user)
+          await fetchUserRoleAndSchools(session.user.id)
         }
       } catch (error) {
-        console.error('Error initializing auth:', error)
+        // Ignore AbortError - it's usually from React strict mode or navigation
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log('Auth init aborted (this is usually fine)')
+        } else {
+          console.error('Error initializing auth:', error)
+        }
       } finally {
         if (isMounted) setLoading(false)
       }
