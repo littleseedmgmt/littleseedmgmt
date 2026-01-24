@@ -114,7 +114,8 @@ export default function StudentsPage() {
     }
 
     fetchData()
-  }, [currentSchool, authLoading, markDataReady])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSchool, authLoading])
 
   // Filter students
   const filteredStudents = students.filter(student => {

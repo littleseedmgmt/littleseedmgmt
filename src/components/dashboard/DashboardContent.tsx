@@ -169,7 +169,8 @@ export function DashboardContent() {
     if (!loading) {
       fetchStats()
     }
-  }, [schools, loading, todayISO, markDataReady])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schools, loading, todayISO])
 
   if (loading || statsLoading) {
     return (

@@ -244,7 +244,8 @@ export default function AttendancePage() {
     }
 
     fetchData()
-  }, [date, currentSchool, authLoading, markDataReady])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, currentSchool, authLoading])
 
   if (authLoading || loading) {
     return (

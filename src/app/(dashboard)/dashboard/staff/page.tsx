@@ -133,7 +133,8 @@ export default function StaffPage() {
     }
 
     fetchData()
-  }, [currentSchool, authLoading, markDataReady])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSchool, authLoading])
 
   const handlePTOAction = async (ptoId: string, action: 'approved' | 'rejected') => {
     setProcessingPTO(ptoId)

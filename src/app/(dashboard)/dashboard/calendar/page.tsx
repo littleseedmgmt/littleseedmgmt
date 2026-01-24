@@ -254,7 +254,8 @@ export default function CalendarPage() {
     }
 
     fetchSchedules()
-  }, [currentDate, currentSchool, schools, markDataReady])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate, currentSchool, schools])
 
   const dayOfWeek = DAYS_OF_WEEK[currentDate.getDay()]
   const dateDisplay = `${MONTHS[currentDate.getMonth()]} ${currentDate.getDate()}, ${currentDate.getFullYear()}`
