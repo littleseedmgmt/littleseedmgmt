@@ -116,6 +116,12 @@ class PerfMonitor {
     this.entries.set(entry.id, entry)
   }
 
+  // Public method to record a completed entry directly
+  recordEntry(entry: PerfEntry) {
+    this.entries.set(entry.id, entry)
+    this.notifyListeners()
+  }
+
   getEntries(): PerfEntry[] {
     return Array.from(this.entries.values())
   }
@@ -176,24 +182,53 @@ class PerfMonitor {
 // Singleton instance
 export const perfMonitor = typeof window !== 'undefined' ? new PerfMonitor() : null as unknown as PerfMonitor
 
-// Instrumented fetch wrapper
+// Instrumented fetch wrapper - simple version that always works
 export async function perfFetch(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-  const name = url.replace(/^.*\/api\//, '/api/').split('?')[0]
-
-  const id = perfMonitor?.start(name, 'api', { url, method: init?.method || 'GET' })
-
+  // Check if we should track (client-side only)
+  let shouldTrack = false
   try {
-    const response = await fetch(input, init)
-    perfMonitor?.end(id)
-    return response
-  } catch (error) {
-    perfMonitor?.end(id)
-    throw error
+    if (typeof window !== 'undefined') {
+      shouldTrack = localStorage.getItem('perf_debug') === '1' ||
+        new URLSearchParams(window.location.search).get('perf') === '1'
+    }
+  } catch {
+    // Ignore errors accessing localStorage/window
   }
+
+  const startTime = performance.now()
+  const response = await fetch(input, init)
+  const duration = performance.now() - startTime
+
+  if (shouldTrack) {
+    try {
+      const url = typeof input === 'string' ? input : (input as Request).url || String(input)
+      const name = url.replace(/^.*\/api\//, '/api/').split('?')[0]
+
+      // Log to console
+      const emoji = duration > 500 ? '🔴' : duration > 200 ? '🟡' : '🟢'
+      console.log(`[PERF] ${emoji} API: ${name} - ${duration.toFixed(2)}ms`)
+
+      // Record in perfMonitor
+      if (perfMonitor) {
+        perfMonitor.recordEntry({
+          id: `api-${name}-${Date.now()}`,
+          name,
+          type: 'api',
+          startTime,
+          endTime: performance.now(),
+          duration,
+          metadata: { url, method: init?.method || 'GET' }
+        })
+      }
+    } catch (e) {
+      console.error('[PERF] Error tracking:', e)
+    }
+  }
+
+  return response
 }
 
 // Helper to time any async function

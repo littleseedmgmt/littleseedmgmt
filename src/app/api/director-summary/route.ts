@@ -28,11 +28,13 @@ interface SchoolRecord {
   name: string
 }
 
-const systemPrompt = `You are parsing daily attendance messages from daycare directors.
+const getSystemPrompt = (directorName: string | null) => `You are parsing daily attendance messages from daycare directors.
 Extract:
 1. Student counts by age group with staffing (qualified teachers, aides)
 2. Teacher absences (names of staff who are out)
 3. Schedule changes (staff leaving early, arriving late, etc.)
+
+IMPORTANT: ${directorName ? `The director sending this message is "${directorName}". If the message contains "I" referring to the director (e.g., "I leave early", "I'll be out", "I come in late"), replace "I" with "${directorName}" in the schedule_changes.` : 'If "I" is used without a name, use "Director" as the name.'}
 
 Age groups to recognize and normalize to these exact values:
 - "infant" for: infant, infants, babies, baby
@@ -85,6 +87,21 @@ export async function POST(request: NextRequest) {
 
     const school = schoolData as SchoolRecord
 
+    // Look up the director of this school
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabaseAny = supabase as any
+    const { data: directorData } = await supabaseAny
+      .from('teachers')
+      .select('first_name, last_name')
+      .eq('school_id', school_id)
+      .eq('role', 'director')
+      .eq('status', 'active')
+      .single()
+
+    const directorName = directorData
+      ? `${directorData.first_name} ${directorData.last_name}`
+      : null
+
     // Call Claude API to parse the message
     const anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
@@ -99,7 +116,7 @@ export async function POST(request: NextRequest) {
           content: `Parse this daycare attendance message:\n\n${raw_message}`,
         },
       ],
-      system: systemPrompt,
+      system: getSystemPrompt(directorName),
     })
 
     // Extract the text response

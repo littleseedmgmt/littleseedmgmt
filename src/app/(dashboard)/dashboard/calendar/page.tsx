@@ -90,6 +90,9 @@ export default function CalendarPage() {
   }
 
   useEffect(() => {
+    // Don't fetch until auth is ready
+    if (authLoading) return
+
     const fetchSchedules = async () => {
       const schoolsToFetch = currentSchool ? [currentSchool] : schools
 
@@ -255,7 +258,7 @@ export default function CalendarPage() {
 
     fetchSchedules()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDate, currentSchool, schools])
+  }, [currentDate, currentSchool, schools, authLoading])
 
   const dayOfWeek = DAYS_OF_WEEK[currentDate.getDay()]
   const dateDisplay = `${MONTHS[currentDate.getMonth()]} ${currentDate.getDate()}, ${currentDate.getFullYear()}`
