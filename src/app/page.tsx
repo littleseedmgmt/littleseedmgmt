@@ -1,4 +1,5 @@
-import Link from "next/link";
+const prodUrl = process.env.NEXT_PUBLIC_PROD_URL || 'https://app.littleseedmgmt.com'
+const testUrl = process.env.NEXT_PUBLIC_TEST_URL || 'https://test.littleseedmgmt.com'
 
 export default function Home() {
   return (
@@ -11,20 +12,6 @@ export default function Home() {
               <span className="text-white font-bold text-sm">LS</span>
             </div>
             <span className="font-semibold text-lg">LittleSeedMgmt</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/login"
-              className="text-gray-700 hover:text-gray-900 font-medium"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/login"
-              className="btn btn-primary"
-            >
-              Get Started
-            </Link>
           </div>
         </div>
       </header>
@@ -41,13 +28,60 @@ export default function Home() {
             LittleSeedMgmt is a comprehensive management system for LittleSeed Schools.
             Track attendance, manage schedules, handle staff planning, and more — all in one place.
           </p>
-          <div className="flex items-center justify-center gap-4">
-            <Link href="/login" className="btn btn-primary">
-              Sign In to Dashboard
-            </Link>
-            <a href="https://github.com/kamalneel/littleseedmgmt" className="btn btn-secondary" target="_blank" rel="noopener noreferrer">
-              View Documentation
-            </a>
+
+          {/* Environment Selection */}
+          <div className="max-w-2xl mx-auto mb-12">
+            <h2 className="text-h3 text-gray-900 mb-6">Choose Your Environment</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Production Environment */}
+              <a
+                href={prodUrl}
+                className="group p-6 bg-white rounded-xl border-2 border-gray-200 hover:border-green-500 hover:shadow-lg transition-all text-left"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                    <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+                  </div>
+                  <h3 className="text-h4 text-gray-900 group-hover:text-green-600 transition-colors">Production</h3>
+                </div>
+                <p className="text-body-sm text-gray-500 mb-4">
+                  Access the live system with real data. All changes will affect actual records.
+                </p>
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-green-600">
+                  Go to Production
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </span>
+              </a>
+
+              {/* Test Environment */}
+              <a
+                href={testUrl}
+                className="group p-6 bg-white rounded-xl border-2 border-gray-200 hover:border-amber-500 hover:shadow-lg transition-all text-left"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-h4 text-gray-900 group-hover:text-amber-600 transition-colors">Test Environment</h3>
+                </div>
+                <p className="text-body-sm text-gray-500 mb-4">
+                  Safe sandbox for testing. Use this to explore features without affecting real data.
+                </p>
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-amber-600">
+                  Go to Test Mode
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </span>
+              </a>
+            </div>
+            <p className="text-caption text-gray-400 mt-4">
+              Your login credentials work in both environments.
+            </p>
           </div>
 
           {/* Feature cards */}

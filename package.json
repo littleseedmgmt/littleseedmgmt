@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:push": "npx supabase db push",
+    "db:seed": "echo 'Run seed via API: curl -X POST http://localhost:3000/api/dev/seed'",
+    "db:clear": "echo 'Run clear via API: curl -X DELETE http://localhost:3000/api/dev/seed'"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
