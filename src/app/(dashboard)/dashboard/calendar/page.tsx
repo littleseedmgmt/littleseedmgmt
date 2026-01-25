@@ -137,9 +137,6 @@ interface SchoolDaySchedule {
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-// Hour slots for timeline view (7am to 6pm)
-const HOUR_SLOTS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-
 type DayViewMode = 'schedule' | 'timeline'
 
 interface OptimizedBreak {
@@ -721,7 +718,7 @@ export default function CalendarPage() {
   )
 }
 
-// Timeline view - shows hour-by-hour grid like a spreadsheet
+// Timeline view - clean table layout with equal-width columns for readability
 function SchoolTimelineCard({
   schedule
 }: {
@@ -734,146 +731,108 @@ function SchoolTimelineCard({
     return name
   }
 
-  // Convert time string to decimal hour (e.g., "09:30" -> 9.5)
-  const timeToDecimal = (time: string): number => {
-    const [hours, minutes] = time.split(':').map(Number)
-    return hours + (minutes || 0) / 60
-  }
-
-  // Format hour for display
-  const formatHour = (hour: number): string => {
-    if (hour === 12) return '12'
-    if (hour > 12) return `${hour - 12}`
-    return `${hour}`
-  }
-
-  // Format time for display in cells
-  const formatTimeShort = (time: string): string => {
+  // Format time for display
+  const formatTimeDisplay = (time: string): string => {
     const [hours, minutes] = time.split(':')
     const h = parseInt(hours)
     const m = minutes || '00'
     const hour = h > 12 ? h - 12 : h === 0 ? 12 : h
-    return m === '00' ? `${hour}` : `${hour}:${m}`
+    const ampm = h >= 12 ? 'pm' : 'am'
+    return m === '00' ? `${hour}${ampm}` : `${hour}:${m}${ampm}`
   }
 
-  // Calculate the column span and position for a time block
-  const getBlockStyle = (startTime: string, endTime: string) => {
-    const startHour = timeToDecimal(startTime)
-    const endHour = timeToDecimal(endTime)
-    const startOffset = Math.max(0, startHour - 7) // Start from 7am
-    const duration = endHour - startHour
-
-    // Each hour is ~60px wide
-    const hourWidth = 60
-    const left = startOffset * hourWidth
-    const width = duration * hourWidth
-
-    return {
-      left: `${left}px`,
-      width: `${Math.max(width, 50)}px`, // Minimum 50px width
+  // Get background color based on block type
+  const getBlockBg = (type: 'work' | 'break' | 'lunch') => {
+    switch (type) {
+      case 'break': return 'bg-yellow-50'
+      case 'lunch': return 'bg-blue-50'
+      default: return 'bg-white'
     }
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden print:rounded-none print:border-black">
       {/* School Header */}
-      <div className="bg-green-100 px-4 py-2 border-b border-green-200">
-        <h2 className="text-base font-semibold text-gray-900 text-center">
+      <div className="bg-green-100 px-4 py-3 border-b border-green-200 print:bg-green-50">
+        <h2 className="text-lg font-bold text-gray-900 text-center">
           {getShortName(schedule.school.name)}
         </h2>
       </div>
 
-      {/* Timeline Grid */}
+      {/* Schedule Table */}
       <div className="overflow-x-auto">
-        <div className="min-w-[800px]">
-          {/* Hour Headers */}
-          <div className="flex border-b border-gray-300">
-            {/* Staff name column header */}
-            <div className="w-[80px] min-w-[80px] px-2 py-1 bg-gray-50 border-r border-gray-300 text-xs font-medium text-gray-500">
-              Staff
-            </div>
-            {/* Hour columns */}
-            {HOUR_SLOTS.map((hour) => (
-              <div
-                key={hour}
-                className="w-[60px] min-w-[60px] px-1 py-1 text-center text-xs font-medium text-gray-500 border-r border-gray-200 bg-gray-50"
+        <table className="w-full border-collapse">
+          <tbody>
+            {schedule.staff.map((staffSchedule, staffIdx) => (
+              <tr
+                key={staffSchedule.teacher.id}
+                className={staffIdx > 0 ? 'border-t-2 border-gray-300' : ''}
               >
-                {formatHour(hour)}
-                <span className="text-gray-400 ml-0.5">{hour < 12 ? 'am' : 'pm'}</span>
-              </div>
-            ))}
-          </div>
+                {/* Staff Name - Fixed width */}
+                <td className="w-24 min-w-[96px] px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300 bg-gray-50 align-top text-sm">
+                  {staffSchedule.teacher.first_name}
+                </td>
 
-          {/* Staff Rows */}
-          {schedule.staff.map((staffSchedule, staffIdx) => (
-            <div
-              key={staffSchedule.teacher.id}
-              className={`flex ${staffIdx > 0 ? 'border-t border-gray-200' : ''}`}
-            >
-              {/* Staff Name */}
-              <div className="w-[80px] min-w-[80px] px-2 py-2 font-medium text-xs text-gray-900 border-r border-gray-300 bg-white flex items-start">
-                {staffSchedule.teacher.first_name}
-              </div>
+                {/* Time Blocks - Equal width columns */}
+                {staffSchedule.blocks.map((block, idx) => (
+                  <td
+                    key={idx}
+                    className={`min-w-[140px] px-3 py-2 border-r border-gray-200 align-top ${getBlockBg(block.type)}`}
+                  >
+                    {/* Time Range - Bold and prominent */}
+                    <div className="font-bold text-gray-900 text-sm whitespace-nowrap">
+                      {formatTimeDisplay(block.start_time)} - {formatTimeDisplay(block.end_time)}
+                    </div>
 
-              {/* Timeline area with blocks */}
-              <div className="flex-1 relative" style={{ height: 'auto', minHeight: '50px' }}>
-                {/* Hour grid lines */}
-                <div className="absolute inset-0 flex">
-                  {HOUR_SLOTS.map((hour) => (
-                    <div
-                      key={hour}
-                      className="w-[60px] min-w-[60px] border-r border-gray-100 h-full"
-                    />
-                  ))}
-                </div>
-
-                {/* Time blocks positioned absolutely */}
-                <div className="relative py-1 flex flex-wrap gap-y-1">
-                  {staffSchedule.blocks.map((block, idx) => {
-                    const style = getBlockStyle(block.start_time, block.end_time)
-                    return (
-                      <div
-                        key={idx}
-                        className={`absolute top-1 px-1 py-0.5 text-xs border rounded ${
-                          block.type === 'break' ? 'bg-yellow-100 border-yellow-400' :
-                          block.type === 'lunch' ? 'bg-blue-100 border-blue-400' :
-                          'bg-green-50 border-green-300'
-                        }`}
-                        style={{
-                          left: style.left,
-                          width: style.width,
-                          minWidth: '50px',
-                        }}
-                      >
-                        <div className="font-medium text-gray-900 truncate">
-                          {formatTimeShort(block.start_time)} - {formatTimeShort(block.end_time)}
-                        </div>
-                        {block.classroom_name && (
-                          <div className="text-gray-700 truncate text-[10px]">
-                            {block.classroom_name}
-                          </div>
-                        )}
-                        {block.notes && (
-                          <div className={`truncate text-[10px] font-medium ${
-                            block.type === 'break' ? 'text-yellow-700' :
-                            block.type === 'lunch' ? 'text-blue-700' :
-                            'text-gray-500'
-                          }`}>
-                            {block.notes}
-                          </div>
-                        )}
-                        {block.substitute_name && (
-                          <div className="truncate text-[10px] text-green-700 font-medium">
-                            {block.substitute_name}
-                          </div>
-                        )}
+                    {/* Block type label for breaks/lunch */}
+                    {block.type === 'break' && (
+                      <div className="text-yellow-700 font-semibold text-xs mt-1">
+                        10 minute break
                       </div>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          ))}
+                    )}
+                    {block.type === 'lunch' && (
+                      <div className="text-blue-700 font-semibold text-xs mt-1">
+                        Lunch break
+                      </div>
+                    )}
+
+                    {/* Classroom/Role info */}
+                    {block.classroom_name && (
+                      <div className="text-gray-600 text-xs mt-1">
+                        {block.classroom_name}
+                      </div>
+                    )}
+
+                    {/* Substitute info - highlighted */}
+                    {block.substitute_name && (
+                      <div className="text-green-700 font-semibold text-xs mt-1">
+                        {block.substitute_name}
+                      </div>
+                    )}
+                  </td>
+                ))}
+
+                {/* Fill remaining space */}
+                <td className="bg-gray-50"></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Legend */}
+      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex gap-6 text-xs print:bg-white">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-yellow-50 border border-yellow-300 rounded"></div>
+          <span className="text-gray-700 font-medium">10 min Break</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-blue-50 border border-blue-300 rounded"></div>
+          <span className="text-gray-700 font-medium">Lunch</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-green-700 font-semibold">Green text</span>
+          <span className="text-gray-700">= Substitute covering</span>
         </div>
       </div>
 
@@ -887,7 +846,7 @@ function SchoolTimelineCard({
   )
 }
 
-// Schedule view - shows blocks in a flowing table layout
+// Schedule view - compact card layout for quick overview
 function SchoolDayCard({
   schedule,
   formatTimeRange
@@ -902,91 +861,58 @@ function SchoolDayCard({
     return name
   }
 
-  // Get background and text colors for each block type
-  const getBlockStyles = (type: 'work' | 'break' | 'lunch') => {
-    switch (type) {
-      case 'break':
-        return 'bg-yellow-100 border-yellow-300'
-      case 'lunch':
-        return 'bg-blue-100 border-blue-300'
-      default:
-        return 'bg-white border-gray-200'
-    }
-  }
-
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* School Header */}
       <div className="bg-green-100 px-4 py-3 border-b border-green-200">
-        <h2 className="text-lg font-semibold text-gray-900 text-center">
+        <h2 className="text-lg font-bold text-gray-900 text-center">
           {getShortName(schedule.school.name)}
         </h2>
       </div>
 
-      {/* Schedule Table - Spreadsheet Style */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm border-collapse">
-          <tbody>
-            {schedule.staff.map((staffSchedule, staffIdx) => (
-              <tr key={staffSchedule.teacher.id} className={staffIdx > 0 ? 'border-t-2 border-gray-300' : ''}>
-                {/* Staff Name Cell */}
-                <td className="px-3 py-2 font-semibold text-gray-900 whitespace-nowrap border-r-2 border-gray-300 bg-gray-50 align-middle min-w-[100px] w-[100px]">
-                  {staffSchedule.teacher.first_name}
-                </td>
+      {/* Staff Cards */}
+      <div className="p-4 space-y-4">
+        {schedule.staff.map((staffSchedule) => (
+          <div key={staffSchedule.teacher.id} className="border border-gray-200 rounded-lg overflow-hidden">
+            {/* Staff Name Header */}
+            <div className="bg-gray-100 px-4 py-2 border-b border-gray-200">
+              <span className="font-bold text-gray-900">{staffSchedule.teacher.first_name} {staffSchedule.teacher.last_name}</span>
+              {staffSchedule.teacher.classroom_title && (
+                <span className="text-gray-500 ml-2 text-sm">({staffSchedule.teacher.classroom_title})</span>
+              )}
+            </div>
 
-                {/* Time Blocks as individual cells */}
-                {staffSchedule.blocks.map((block, idx) => (
-                  <td
-                    key={idx}
-                    className={`px-3 py-2 border-r border-gray-200 align-top min-w-[120px] ${getBlockStyles(block.type)}`}
-                  >
-                    {/* Time Range */}
-                    <div className="font-semibold text-gray-900 whitespace-nowrap">
-                      {formatTimeRange(block.start_time, block.end_time)}
-                    </div>
-                    {/* Room/Activity - Second Row */}
-                    {block.classroom_name && (
-                      <div className="text-gray-700 mt-1 text-xs">
-                        {block.classroom_name}
-                      </div>
-                    )}
-                    {/* Notes/Break label - Third Row */}
-                    {block.notes && (
-                      <div className={`mt-1 text-xs font-medium ${
-                        block.type === 'break' ? 'text-yellow-700' :
-                        block.type === 'lunch' ? 'text-blue-700' :
-                        'text-gray-500'
-                      }`}>
-                        {block.notes}
-                      </div>
-                    )}
-                    {/* Substitute name */}
-                    {block.substitute_name && (
-                      <div className="mt-1 text-xs text-green-700 font-medium">
-                        {block.substitute_name}
-                      </div>
-                    )}
-                  </td>
-                ))}
-
-                {/* Fill remaining space */}
-                <td className="bg-white"></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Legend */}
-      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex gap-4 text-xs">
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 bg-yellow-100 border border-yellow-300 rounded"></div>
-          <span className="text-gray-600">Break</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 bg-blue-100 border border-blue-300 rounded"></div>
-          <span className="text-gray-600">Lunch</span>
-        </div>
+            {/* Schedule Blocks as horizontal flow */}
+            <div className="flex flex-wrap gap-2 p-3">
+              {staffSchedule.blocks.map((block, idx) => (
+                <div
+                  key={idx}
+                  className={`px-3 py-2 rounded-lg border ${
+                    block.type === 'break' ? 'bg-yellow-50 border-yellow-300' :
+                    block.type === 'lunch' ? 'bg-blue-50 border-blue-300' :
+                    'bg-gray-50 border-gray-200'
+                  }`}
+                >
+                  <div className="font-bold text-gray-900 text-sm">
+                    {formatTimeRange(block.start_time, block.end_time)}
+                  </div>
+                  {block.type === 'break' && (
+                    <div className="text-yellow-700 text-xs font-semibold">10 min break</div>
+                  )}
+                  {block.type === 'lunch' && (
+                    <div className="text-blue-700 text-xs font-semibold">Lunch</div>
+                  )}
+                  {block.classroom_name && block.type === 'work' && (
+                    <div className="text-gray-600 text-xs">{block.classroom_name}</div>
+                  )}
+                  {block.substitute_name && (
+                    <div className="text-green-700 text-xs font-semibold">{block.substitute_name}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Empty state for school */}
