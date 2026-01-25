@@ -167,11 +167,11 @@ export async function POST(request: NextRequest) {
     const classrooms = (classroomsRes.data || []) as Classroom[]
     const students = (studentsRes.data || []) as Student[]
     const attendance = attendanceRes.data || []
-    const settings = settingsRes.data || []
+    const settings = (settingsRes.data || []) as { setting_key: string; setting_value: RatioSettings }[]
 
     // Get ratio settings
-    const normalRatiosSetting = settings.find(s => s.setting_key === 'ratio_normal')
-    const napRatiosSetting = settings.find(s => s.setting_key === 'ratio_naptime')
+    const normalRatiosSetting = settings.find((s: { setting_key: string }) => s.setting_key === 'ratio_normal')
+    const napRatiosSetting = settings.find((s: { setting_key: string }) => s.setting_key === 'ratio_naptime')
 
     const normalRatios: RatioSettings = normalRatiosSetting?.setting_value || {
       infant: 4, toddler: 4, twos: 12, threes: 12, preschool: 12, pre_k: 12
