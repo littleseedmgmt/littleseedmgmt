@@ -11,6 +11,8 @@ interface StudentRecord {
   guardian_name: string
   guardian_phone: string | null
   status: string
+  nap_start: string | null
+  nap_end: string | null
   classroom: { id: string; name: string } | null
   school: { id: string; name: string }
 }
@@ -35,6 +37,7 @@ export async function GET(request: NextRequest) {
       .select(`
         id, school_id, first_name, last_name, date_of_birth,
         classroom_id, guardian_name, guardian_phone, status,
+        nap_start, nap_end,
         classroom:classrooms(id, name),
         school:schools(id, name)
       `)
