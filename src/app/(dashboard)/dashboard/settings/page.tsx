@@ -7,6 +7,7 @@ import { EnvSwitcher } from '@/components/EnvBanner'
 const isTestMode = process.env.NEXT_PUBLIC_ENV_MODE === 'test'
 
 interface RatioSettings {
+  [key: string]: number
   infant: number
   toddler: number
   twos: number
@@ -16,6 +17,7 @@ interface RatioSettings {
 }
 
 interface BreakSettings {
+  [key: string]: number | string
   break_duration_minutes: number
   breaks_per_shift: number
   break1_window: string
