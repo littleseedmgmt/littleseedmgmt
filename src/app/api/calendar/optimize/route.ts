@@ -141,16 +141,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch all required data in parallel
-    const [
-      schoolRes,
-      teachersRes,
-      classroomsRes,
-      studentsRes,
-      attendanceRes,
-      settingsRes
-    ] = await Promise.all([
-      supabase.from('schools').select('*').eq('id', school_id).single(),
+    // Fetch school first (single query has different return type)
+    const { data: schoolData, error: schoolError } = await supabase
+      .from('schools')
+      .select('id, name')
+      .eq('id', school_id)
+      .single()
+
+    if (schoolError || !schoolData) {
+      return NextResponse.json({ error: 'School not found' }, { status: 404 })
+    }
+
+    const school = schoolData as { id: string; name: string }
+
+    // Fetch remaining data in parallel (all array queries)
+    const [teachersRes, classroomsRes, studentsRes, attendanceRes, settingsRes] = await Promise.all([
       supabase.from('teachers').select('*').eq('school_id', school_id).eq('status', 'active'),
       supabase.from('classrooms').select('*').eq('school_id', school_id),
       supabase.from('students').select('*').eq('school_id', school_id).eq('status', 'enrolled'),
@@ -158,15 +163,10 @@ export async function POST(request: NextRequest) {
       supabase.from('school_settings').select('*').or(`school_id.is.null,school_id.eq.${school_id}`)
     ])
 
-    if (schoolRes.error || !schoolRes.data) {
-      return NextResponse.json({ error: 'School not found' }, { status: 404 })
-    }
-
-    const school = schoolRes.data as { id: string; name: string }
     const teachers = (teachersRes.data || []) as Teacher[]
     const classrooms = (classroomsRes.data || []) as Classroom[]
     const students = (studentsRes.data || []) as Student[]
-    const attendance = attendanceRes.data || []
+    const attendance = (attendanceRes.data || []) as { student_id: string }[]
     const settings = (settingsRes.data || []) as { setting_key: string; setting_value: RatioSettings }[]
 
     // Get ratio settings
@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get present students (those with attendance marked)
-    const presentStudentIds = new Set(attendance.map((a: { student_id: string }) => a.student_id))
+    const presentStudentIds = new Set(attendance.map(a => a.student_id))
     const presentStudents = students.filter(s => presentStudentIds.has(s.id))
 
     // Count students per classroom
