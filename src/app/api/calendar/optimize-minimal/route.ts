@@ -170,9 +170,26 @@ export async function POST(request: NextRequest) {
       infant: 12, toddler: 12, twos: 24, threes: 24, preschool: 24, pre_k: 24
     }
 
+    const warnings: string[] = []
+
     // Get present students
-    const presentStudentIds = new Set(attendance.map(a => a.student_id))
-    const presentStudents = students.filter(s => presentStudentIds.has(s.id))
+    // If no attendance records for this date, assume all enrolled students are present
+    let presentStudents: Student[]
+    if (attendance.length === 0) {
+      // No attendance data - use all enrolled students for planning
+      presentStudents = students
+      if (students.length > 0) {
+        warnings.push('No attendance data for this date - using all enrolled students for calculation')
+      }
+    } else {
+      const presentStudentIds = new Set(attendance.map(a => a.student_id))
+      presentStudents = students.filter(s => presentStudentIds.has(s.id))
+    }
+
+    // Check if we have any students
+    if (presentStudents.length === 0) {
+      warnings.push('No enrolled students found for this school')
+    }
 
     // Count students per classroom
     const studentsByClassroom = new Map<string, Student[]>()
@@ -249,7 +266,6 @@ export async function POST(request: NextRequest) {
     }
 
     const minimalTeachersNeeded = minInfantQualifiedNeeded + minOtherNeeded
-    const warnings: string[] = []
 
     // Select essential teachers
     // Priority: 1) Infant-qualified for infant rooms, 2) Lead teachers, 3) Others by shift coverage
