@@ -30,6 +30,7 @@ interface TimeBlock {
   classroom_name: string | null
   notes: string | null
   type: 'work' | 'break' | 'lunch'
+  substitute_name?: string | null  // Who is covering during break
 }
 
 // Helper to convert time string to minutes since midnight for comparison
@@ -48,21 +49,23 @@ function buildTimeSegments(
   lunchEnd: string | null,
   break2Start: string | null,
   break2End: string | null,
-  classroomName: string | null
+  classroomName: string | null,
+  break1SubName?: string | null,
+  break2SubName?: string | null
 ): TimeBlock[] {
   const segments: TimeBlock[] = []
 
   // Collect all break periods with their times
-  const breaks: { start: string; end: string; type: 'break' | 'lunch' }[] = []
+  const breaks: { start: string; end: string; type: 'break' | 'lunch'; subName?: string | null }[] = []
 
   if (break1Start && break1End) {
-    breaks.push({ start: break1Start, end: break1End, type: 'break' })
+    breaks.push({ start: break1Start, end: break1End, type: 'break', subName: break1SubName })
   }
   if (lunchStart && lunchEnd) {
-    breaks.push({ start: lunchStart, end: lunchEnd, type: 'lunch' })
+    breaks.push({ start: lunchStart, end: lunchEnd, type: 'lunch', subName: null })
   }
   if (break2Start && break2End) {
-    breaks.push({ start: break2Start, end: break2End, type: 'break' })
+    breaks.push({ start: break2Start, end: break2End, type: 'break', subName: break2SubName })
   }
 
   // Sort breaks by start time
@@ -89,7 +92,8 @@ function buildTimeSegments(
       end_time: brk.end,
       classroom_name: null,
       notes: brk.type === 'lunch' ? 'Lunch' : '10 min break',
-      type: brk.type
+      type: brk.type,
+      substitute_name: brk.subName
     })
 
     currentTime = brk.end
@@ -143,8 +147,10 @@ interface OptimizedBreak {
   teacher_name: string
   break1_start: string
   break1_end: string
+  break1_sub_name: string | null
   break2_start: string
   break2_end: string
+  break2_sub_name: string | null
 }
 
 interface StaffingAlert {
@@ -289,7 +295,9 @@ export default function CalendarPage() {
           teacher.lunch_break_end,
           optimizedBreak.break2_start,
           optimizedBreak.break2_end,
-          teacher.classroom_title
+          teacher.classroom_title,
+          optimizedBreak.break1_sub_name,
+          optimizedBreak.break2_sub_name
         )
 
         return {
@@ -854,6 +862,11 @@ function SchoolTimelineCard({
                             {block.notes}
                           </div>
                         )}
+                        {block.substitute_name && (
+                          <div className="truncate text-[10px] text-green-700 font-medium">
+                            {block.substitute_name}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -945,6 +958,12 @@ function SchoolDayCard({
                         'text-gray-500'
                       }`}>
                         {block.notes}
+                      </div>
+                    )}
+                    {/* Substitute name */}
+                    {block.substitute_name && (
+                      <div className="mt-1 text-xs text-green-700 font-medium">
+                        {block.substitute_name}
                       </div>
                     )}
                   </td>

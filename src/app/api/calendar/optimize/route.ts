@@ -41,8 +41,10 @@ interface OptimizedBreak {
   teacher_name: string
   break1_start: string
   break1_end: string
+  break1_sub_name: string | null  // Who covers during break 1
   break2_start: string
   break2_end: string
+  break2_sub_name: string | null  // Who covers during break 2
 }
 
 interface StaffingAlert {
@@ -267,55 +269,144 @@ export async function POST(request: NextRequest) {
     // Assign breaks to each teacher
     const breakAssignments = new Map<string, { break1: number; break2: number }>()
 
+    // Track which slots are used to stagger breaks
+    const usedSlots = new Map<number, string[]>() // slot start time -> teacher ids
+
+    // Helper: Check if a teacher is working at a given time
+    const isTeacherWorking = (teacher: Teacher, timeMinutes: number): boolean => {
+      if (!teacher.regular_shift_start || !teacher.regular_shift_end) return false
+      const start = timeToMinutes(teacher.regular_shift_start)
+      const end = timeToMinutes(teacher.regular_shift_end)
+      return timeMinutes >= start && timeMinutes < end
+    }
+
+    // Helper: Check if teacher is on break/lunch at given time
+    const isTeacherOnBreak = (teacherId: string, timeMinutes: number): boolean => {
+      const assignment = breakAssignments.get(teacherId)
+      if (!assignment) return false
+      // Check break1
+      if (timeMinutes >= assignment.break1 && timeMinutes < assignment.break1 + 10) return true
+      // Check break2
+      if (timeMinutes >= assignment.break2 && timeMinutes < assignment.break2 + 10) return true
+      return false
+    }
+
+    // Helper: Find a substitute teacher for a given break time
+    const findSubstitute = (
+      teacherOnBreak: Teacher,
+      breakTime: number,
+      classrooms: Classroom[]
+    ): string | null => {
+      // Get the classroom of the teacher on break
+      const teacherClassroom = classrooms.find(c => c.name === teacherOnBreak.classroom_title)
+      const isInfantRoom = teacherClassroom?.age_group === 'infant' || teacherClassroom?.age_group === 'toddler'
+
+      // Find available teachers who can cover
+      for (const sub of workingTeachers) {
+        if (sub.id === teacherOnBreak.id) continue // Can't substitute yourself
+        if (!isTeacherWorking(sub, breakTime)) continue // Not working at this time
+        if (isTeacherOnBreak(sub.id, breakTime)) continue // Already on break
+
+        // Check lunch time
+        if (sub.lunch_break_start) {
+          const lunchStart = timeToMinutes(sub.lunch_break_start)
+          const lunchEnd = sub.lunch_break_end ? timeToMinutes(sub.lunch_break_end) : lunchStart + 60
+          if (breakTime >= lunchStart && breakTime < lunchEnd) continue // On lunch
+        }
+
+        // Check infant qualification if needed
+        if (isInfantRoom && !isInfantQualified(sub)) continue
+
+        return `${sub.first_name} helps`
+      }
+
+      return null // No substitute found
+    }
+
     for (const teacher of workingTeachers) {
-      if (!teacher.regular_shift_start || !teacher.regular_shift_end || !teacher.lunch_break_start) {
+      if (!teacher.regular_shift_start || !teacher.regular_shift_end) {
         continue
       }
 
       const shiftStart = timeToMinutes(teacher.regular_shift_start)
       const shiftEnd = timeToMinutes(teacher.regular_shift_end)
-      const lunchStart = timeToMinutes(teacher.lunch_break_start)
-      const lunchEnd = teacher.lunch_break_end ? timeToMinutes(teacher.lunch_break_end) : lunchStart + 60
 
-      // Find best break1 slot (before lunch)
+      // Get lunch times if available
+      const lunchStart = teacher.lunch_break_start ? timeToMinutes(teacher.lunch_break_start) : null
+      const lunchEnd = teacher.lunch_break_end
+        ? timeToMinutes(teacher.lunch_break_end)
+        : (lunchStart ? lunchStart + 60 : null)
+
+      // Calculate midpoint for splitting breaks (before/after lunch or just middle of shift)
+      const midpoint = lunchStart || Math.floor((shiftStart + shiftEnd) / 2)
+
+      // Find best break1 slot (first half of shift, before lunch if exists)
       let break1Time = shiftStart + 120 // Default: 2 hours after shift start
       for (const slot of breakSlots) {
-        if (slot.start > shiftStart + 60 && slot.end < lunchStart - 30) {
-          // Prefer nap time slots
-          if (slot.isNapTime) {
+        const beforeLunch = lunchStart ? slot.end < lunchStart - 10 : slot.end < midpoint
+        if (slot.start >= shiftStart + 60 && beforeLunch) {
+          // Prefer nap time slots, and slots not heavily used
+          const slotUsage = usedSlots.get(slot.start)?.length || 0
+          if (slot.isNapTime && slotUsage < 2) {
             break1Time = slot.start
             break
           }
-          if (!breakAssignments.has(`${slot.start}`)) {
+          if (slotUsage < 2) {
             break1Time = slot.start
           }
         }
       }
 
-      // Find best break2 slot (after lunch)
-      let break2Time = lunchEnd + 120 // Default: 2 hours after lunch
+      // Find best break2 slot (second half of shift, after lunch if exists)
+      const afterLunchStart = lunchEnd || midpoint
+      let break2Time = afterLunchStart + 90 // Default: 1.5 hours after lunch/midpoint
       for (const slot of breakSlots) {
-        if (slot.start > lunchEnd + 60 && slot.end < shiftEnd - 30) {
-          // Prefer nap time slots
-          if (slot.isNapTime) {
+        if (slot.start >= afterLunchStart + 60 && slot.end <= shiftEnd - 30) {
+          const slotUsage = usedSlots.get(slot.start)?.length || 0
+          if (slot.isNapTime && slotUsage < 2) {
             break2Time = slot.start
             break
           }
-          if (!breakAssignments.has(`${slot.start}`)) {
+          if (slotUsage < 2) {
             break2Time = slot.start
           }
         }
       }
+
+      // Make sure break2 is after break1
+      if (break2Time <= break1Time + 30) {
+        break2Time = Math.min(break1Time + 120, shiftEnd - 40)
+      }
+
+      // Track slot usage
+      const break1Users = usedSlots.get(break1Time) || []
+      break1Users.push(teacher.id)
+      usedSlots.set(break1Time, break1Users)
+
+      const break2Users = usedSlots.get(break2Time) || []
+      break2Users.push(teacher.id)
+      usedSlots.set(break2Time, break2Users)
 
       breakAssignments.set(teacher.id, { break1: break1Time, break2: break2Time })
+    }
+
+    // Now generate optimized breaks with substitute info
+    for (const teacher of workingTeachers) {
+      const assignment = breakAssignments.get(teacher.id)
+      if (!assignment) continue
+
+      const break1Sub = findSubstitute(teacher, assignment.break1, classrooms)
+      const break2Sub = findSubstitute(teacher, assignment.break2, classrooms)
 
       optimizedBreaks.push({
         teacher_id: teacher.id,
         teacher_name: `${teacher.first_name} ${teacher.last_name}`,
-        break1_start: minutesToTime(break1Time),
-        break1_end: minutesToTime(break1Time + 10),
-        break2_start: minutesToTime(break2Time),
-        break2_end: minutesToTime(break2Time + 10)
+        break1_start: minutesToTime(assignment.break1),
+        break1_end: minutesToTime(assignment.break1 + 10),
+        break1_sub_name: break1Sub,
+        break2_start: minutesToTime(assignment.break2),
+        break2_end: minutesToTime(assignment.break2 + 10),
+        break2_sub_name: break2Sub
       })
     }
 
