@@ -1,13 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-// Only allow in development
-const isDev = process.env.NODE_ENV === 'development'
+// Allow in development OR test mode
+const isAllowed = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_ENV_MODE === 'test'
 
 // POST /api/dev/seed - Generate test data
 export async function POST() {
-  if (!isDev) {
-    return NextResponse.json({ error: 'Only available in development' }, { status: 403 })
+  if (!isAllowed) {
+    return NextResponse.json({ error: 'Only available in development or test mode' }, { status: 403 })
   }
 
   try {
@@ -53,37 +53,40 @@ export async function POST() {
     }
 
     // Generate attendance for past 14 days (weekdays only)
+    // Each day has 90-95% attendance rate
     const today = new Date()
     for (let i = 14; i >= 0; i--) {
       const date = new Date(today)
       date.setDate(date.getDate() - i)
 
-      // Skip weekends
+      // Skip weekends - no attendance on Saturday (6) or Sunday (0)
       const dayOfWeek = date.getDay()
       if (dayOfWeek === 0 || dayOfWeek === 6) continue
 
       const dateStr = date.toISOString().split('T')[0]
 
+      // Random attendance rate for this day: 90-95%
+      const dailyAttendanceRate = 0.90 + (Math.random() * 0.05)
+
       for (const student of students) {
-        // Random attendance: 85% present, 5% late, 5% absent, 5% excused
         const rand = Math.random()
         let status: string
         let checkInTime: string | null = null
 
-        if (rand < 0.85) {
+        if (rand < dailyAttendanceRate) {
+          // Present - 90-95% of students
           status = 'present'
           const hour = 7 + Math.floor(Math.random() * 1.5)
           const min = Math.floor(Math.random() * 60)
           checkInTime = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}:00`
-        } else if (rand < 0.90) {
-          status = 'late'
-          const hour = 8 + Math.floor(Math.random() * 1.5)
-          const min = Math.floor(Math.random() * 60)
-          checkInTime = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}:00`
-        } else if (rand < 0.95) {
-          status = 'absent'
         } else {
-          status = 'excused'
+          // Not present - split between absent (60%) and excused (40%)
+          const absentRand = Math.random()
+          if (absentRand < 0.6) {
+            status = 'absent'
+          } else {
+            status = 'excused'
+          }
         }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -192,8 +195,8 @@ export async function POST() {
 
 // DELETE /api/dev/seed - Clear test data
 export async function DELETE() {
-  if (!isDev) {
-    return NextResponse.json({ error: 'Only available in development' }, { status: 403 })
+  if (!isAllowed) {
+    return NextResponse.json({ error: 'Only available in development or test mode' }, { status: 403 })
   }
 
   try {
