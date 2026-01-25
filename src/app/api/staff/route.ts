@@ -12,6 +12,8 @@ interface TeacherRecord {
   classroom_title: string | null
   regular_shift_start: string | null
   regular_shift_end: string | null
+  lunch_break_start: string | null
+  lunch_break_end: string | null
   status: string
   photo_url: string | null
   hire_date: string
@@ -38,6 +40,7 @@ export async function GET(request: NextRequest) {
       .select(`
         id, school_id, first_name, last_name, email, phone,
         role, classroom_title, regular_shift_start, regular_shift_end,
+        lunch_break_start, lunch_break_end,
         status, photo_url, hire_date,
         school:schools(id, name)
       `)

@@ -14,6 +14,8 @@ interface Teacher {
   role: string
   regular_shift_start: string | null
   regular_shift_end: string | null
+  lunch_break_start: string | null
+  lunch_break_end: string | null
 }
 
 interface Classroom {
@@ -28,6 +30,94 @@ interface TimeBlock {
   classroom_name: string | null
   notes: string | null
   type: 'work' | 'break' | 'lunch'
+}
+
+// Helper to convert time string to minutes since midnight for comparison
+function timeToMinutes(time: string): number {
+  const [hours, minutes] = time.split(':').map(Number)
+  return hours * 60 + (minutes || 0)
+}
+
+// Helper to build chronological time segments from a shift with breaks
+function buildTimeSegments(
+  shiftStart: string,
+  shiftEnd: string,
+  break1Start: string | null,
+  break1End: string | null,
+  lunchStart: string | null,
+  lunchEnd: string | null,
+  break2Start: string | null,
+  break2End: string | null,
+  classroomName: string | null
+): TimeBlock[] {
+  const segments: TimeBlock[] = []
+
+  // Collect all break periods with their times
+  const breaks: { start: string; end: string; type: 'break' | 'lunch' }[] = []
+
+  if (break1Start && break1End) {
+    breaks.push({ start: break1Start, end: break1End, type: 'break' })
+  }
+  if (lunchStart && lunchEnd) {
+    breaks.push({ start: lunchStart, end: lunchEnd, type: 'lunch' })
+  }
+  if (break2Start && break2End) {
+    breaks.push({ start: break2Start, end: break2End, type: 'break' })
+  }
+
+  // Sort breaks by start time
+  breaks.sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start))
+
+  // Build segments by iterating through the day
+  let currentTime = shiftStart
+
+  for (const brk of breaks) {
+    // Add work segment before this break (if there's time)
+    if (timeToMinutes(currentTime) < timeToMinutes(brk.start)) {
+      segments.push({
+        start_time: currentTime,
+        end_time: brk.start,
+        classroom_name: classroomName,
+        notes: null,
+        type: 'work'
+      })
+    }
+
+    // Add the break segment
+    segments.push({
+      start_time: brk.start,
+      end_time: brk.end,
+      classroom_name: null,
+      notes: brk.type === 'lunch' ? 'Lunch' : '10 min break',
+      type: brk.type
+    })
+
+    currentTime = brk.end
+  }
+
+  // Add final work segment after last break (if there's time)
+  if (timeToMinutes(currentTime) < timeToMinutes(shiftEnd)) {
+    segments.push({
+      start_time: currentTime,
+      end_time: shiftEnd,
+      classroom_name: classroomName,
+      notes: null,
+      type: 'work'
+    })
+  }
+
+  // If no breaks at all, just add the full shift as work
+  if (segments.length === 0) {
+    segments.push({
+      start_time: shiftStart,
+      end_time: shiftEnd,
+      classroom_name: classroomName,
+      notes: null,
+      type: 'work'
+    })
+  }
+
+  return segments
 }
 
 interface StaffDaySchedule {
@@ -171,7 +261,7 @@ export default function CalendarPage() {
                   return shift.teacher_id === teacher.id
                 })
 
-                const blocks: TimeBlock[] = []
+                let blocks: TimeBlock[] = []
 
                 teacherShifts.forEach((s) => {
                   const shift = s as {
@@ -187,56 +277,41 @@ export default function CalendarPage() {
                     break2_end: string | null
                     classroom?: { name: string }
                   }
-                  // Main work block
-                  blocks.push({
-                    start_time: shift.start_time,
-                    end_time: shift.end_time,
-                    classroom_name: shift.classroom_id ? classroomMap.get(shift.classroom_id) || shift.classroom?.name || null : teacher.classroom_title,
-                    notes: shift.notes,
-                    type: 'work'
-                  })
 
-                  // Break blocks
-                  if (shift.break1_start && shift.break1_end) {
-                    blocks.push({
-                      start_time: shift.break1_start,
-                      end_time: shift.break1_end,
-                      classroom_name: null,
-                      notes: 'Break',
-                      type: 'break'
-                    })
-                  }
+                  const classroomName = shift.classroom_id
+                    ? classroomMap.get(shift.classroom_id) || shift.classroom?.name || null
+                    : teacher.classroom_title
 
-                  if (shift.lunch_start && shift.lunch_end) {
-                    blocks.push({
-                      start_time: shift.lunch_start,
-                      end_time: shift.lunch_end,
-                      classroom_name: null,
-                      notes: 'Lunch',
-                      type: 'lunch'
-                    })
-                  }
+                  // Build time segments that split work around breaks
+                  const segments = buildTimeSegments(
+                    shift.start_time,
+                    shift.end_time,
+                    shift.break1_start,
+                    shift.break1_end,
+                    shift.lunch_start,
+                    shift.lunch_end,
+                    shift.break2_start,
+                    shift.break2_end,
+                    classroomName
+                  )
 
-                  if (shift.break2_start && shift.break2_end) {
-                    blocks.push({
-                      start_time: shift.break2_start,
-                      end_time: shift.break2_end,
-                      classroom_name: null,
-                      notes: 'Break',
-                      type: 'break'
-                    })
-                  }
+                  blocks = blocks.concat(segments)
                 })
 
                 // If no shifts, use regular shift times from teacher profile
                 if (blocks.length === 0 && teacher.regular_shift_start && teacher.regular_shift_end) {
-                  blocks.push({
-                    start_time: teacher.regular_shift_start,
-                    end_time: teacher.regular_shift_end,
-                    classroom_name: teacher.classroom_title,
-                    notes: null,
-                    type: 'work'
-                  })
+                  const defaultSegments = buildTimeSegments(
+                    teacher.regular_shift_start,
+                    teacher.regular_shift_end,
+                    null, // no break1 in teacher profile
+                    null,
+                    teacher.lunch_break_start,
+                    teacher.lunch_break_end,
+                    null, // no break2 in teacher profile
+                    null,
+                    teacher.classroom_title
+                  )
+                  blocks = blocks.concat(defaultSegments)
                 }
 
                 return {
@@ -532,9 +607,9 @@ function SchoolTimelineCard({
                       <div
                         key={idx}
                         className={`absolute top-1 px-1 py-0.5 text-xs border rounded ${
-                          block.type === 'break' ? 'bg-amber-50 border-amber-300' :
-                          block.type === 'lunch' ? 'bg-orange-50 border-orange-300' :
-                          'bg-blue-50 border-blue-200'
+                          block.type === 'break' ? 'bg-yellow-100 border-yellow-400' :
+                          block.type === 'lunch' ? 'bg-blue-100 border-blue-400' :
+                          'bg-green-50 border-green-300'
                         }`}
                         style={{
                           left: style.left,
@@ -546,12 +621,16 @@ function SchoolTimelineCard({
                           {formatTimeShort(block.start_time)} - {formatTimeShort(block.end_time)}
                         </div>
                         {block.classroom_name && (
-                          <div className="text-gray-600 truncate text-[10px]">
+                          <div className="text-gray-700 truncate text-[10px]">
                             {block.classroom_name}
                           </div>
                         )}
                         {block.notes && (
-                          <div className="text-gray-500 truncate text-[10px]">
+                          <div className={`truncate text-[10px] font-medium ${
+                            block.type === 'break' ? 'text-yellow-700' :
+                            block.type === 'lunch' ? 'text-blue-700' :
+                            'text-gray-500'
+                          }`}>
                             {block.notes}
                           </div>
                         )}
@@ -590,23 +669,35 @@ function SchoolDayCard({
     return name
   }
 
+  // Get background and text colors for each block type
+  const getBlockStyles = (type: 'work' | 'break' | 'lunch') => {
+    switch (type) {
+      case 'break':
+        return 'bg-yellow-100 border-yellow-300'
+      case 'lunch':
+        return 'bg-blue-100 border-blue-300'
+      default:
+        return 'bg-white border-gray-200'
+    }
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* School Header */}
-      <div className="bg-green-100 px-4 py-2 border-b border-green-200">
-        <h2 className="text-base font-semibold text-gray-900 text-center">
+      <div className="bg-green-100 px-4 py-3 border-b border-green-200">
+        <h2 className="text-lg font-semibold text-gray-900 text-center">
           {getShortName(schedule.school.name)}
         </h2>
       </div>
 
       {/* Schedule Table - Spreadsheet Style */}
       <div className="overflow-x-auto">
-        <table className="w-full text-xs border-collapse">
+        <table className="w-full text-sm border-collapse">
           <tbody>
             {schedule.staff.map((staffSchedule, staffIdx) => (
-              <tr key={staffSchedule.teacher.id} className={staffIdx > 0 ? 'border-t border-gray-300' : ''}>
+              <tr key={staffSchedule.teacher.id} className={staffIdx > 0 ? 'border-t-2 border-gray-300' : ''}>
                 {/* Staff Name Cell */}
-                <td className="px-2 py-1 font-medium text-gray-900 whitespace-nowrap border-r border-gray-300 bg-white align-top min-w-[70px] w-[70px]">
+                <td className="px-3 py-2 font-semibold text-gray-900 whitespace-nowrap border-r-2 border-gray-300 bg-gray-50 align-middle min-w-[100px] w-[100px]">
                   {staffSchedule.teacher.first_name}
                 </td>
 
@@ -614,24 +705,25 @@ function SchoolDayCard({
                 {staffSchedule.blocks.map((block, idx) => (
                   <td
                     key={idx}
-                    className={`px-2 py-1 border-r border-gray-200 align-top min-w-[90px] ${
-                      block.type === 'break' ? 'bg-amber-50' :
-                      block.type === 'lunch' ? 'bg-orange-50' : 'bg-white'
-                    }`}
+                    className={`px-3 py-2 border-r border-gray-200 align-top min-w-[120px] ${getBlockStyles(block.type)}`}
                   >
                     {/* Time Range */}
-                    <div className="font-medium text-gray-900 whitespace-nowrap">
+                    <div className="font-semibold text-gray-900 whitespace-nowrap">
                       {formatTimeRange(block.start_time, block.end_time)}
                     </div>
                     {/* Room/Activity - Second Row */}
                     {block.classroom_name && (
-                      <div className="text-gray-600 mt-0.5">
+                      <div className="text-gray-700 mt-1 text-xs">
                         {block.classroom_name}
                       </div>
                     )}
-                    {/* Notes - Third Row */}
+                    {/* Notes/Break label - Third Row */}
                     {block.notes && (
-                      <div className="text-gray-500 mt-0.5">
+                      <div className={`mt-1 text-xs font-medium ${
+                        block.type === 'break' ? 'text-yellow-700' :
+                        block.type === 'lunch' ? 'text-blue-700' :
+                        'text-gray-500'
+                      }`}>
                         {block.notes}
                       </div>
                     )}
@@ -644,6 +736,18 @@ function SchoolDayCard({
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Legend */}
+      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex gap-4 text-xs">
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 bg-yellow-100 border border-yellow-300 rounded"></div>
+          <span className="text-gray-600">Break</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-3 bg-blue-100 border border-blue-300 rounded"></div>
+          <span className="text-gray-600">Lunch</span>
+        </div>
       </div>
 
       {/* Empty state for school */}
