@@ -158,11 +158,11 @@ export async function POST(request: NextRequest) {
       supabase.from('school_settings').select('*').or(`school_id.is.null,school_id.eq.${school_id}`)
     ])
 
-    if (schoolRes.error) {
+    if (schoolRes.error || !schoolRes.data) {
       return NextResponse.json({ error: 'School not found' }, { status: 404 })
     }
 
-    const school = schoolRes.data
+    const school = schoolRes.data as { id: string; name: string }
     const teachers = (teachersRes.data || []) as Teacher[]
     const classrooms = (classroomsRes.data || []) as Classroom[]
     const students = (studentsRes.data || []) as Student[]
