@@ -169,6 +169,38 @@ interface OptimizationResult {
   }
 }
 
+// Minimal optimization interfaces
+interface MinimalScheduleBlock {
+  start_time: string
+  end_time: string
+  classroom_name: string
+  type: 'work' | 'break' | 'lunch'
+  notes?: string
+}
+
+interface MinimalTeacherSchedule {
+  teacher_id: string
+  teacher_name: string
+  role: string
+  is_essential: boolean
+  reason: string
+  blocks: MinimalScheduleBlock[]
+}
+
+interface MinimalOptimizationResult {
+  success: boolean
+  school_id: string
+  school_name: string
+  current_teachers: number
+  minimal_teachers_needed: number
+  potential_savings: number
+  essential_teachers: MinimalTeacherSchedule[]
+  surplus_teachers: { id: string; name: string; reason: string }[]
+  warnings: string[]
+}
+
+type ScenarioMode = 'actual' | 'optimized'
+
 export default function CalendarPage() {
   const { schools, currentSchool, isOwner, loading: authLoading } = useAuth()
   const { markDataReady } = useComponentPerf('CalendarPage')
@@ -182,6 +214,10 @@ export default function CalendarPage() {
   const [optimizing, setOptimizing] = useState(false)
   const [optimizationResults, setOptimizationResults] = useState<Map<string, OptimizationResult>>(new Map())
   const [showAlerts, setShowAlerts] = useState(true)
+
+  // Minimal optimization state
+  const [scenarioMode, setScenarioMode] = useState<ScenarioMode>('actual')
+  const [minimalResults, setMinimalResults] = useState<Map<string, MinimalOptimizationResult>>(new Map())
 
   const getShortName = (name: string) => {
     if (name === 'Peter Pan Mariner Square') return 'Mariner Square'
@@ -215,28 +251,41 @@ export default function CalendarPage() {
     setCurrentDate(new Date())
   }
 
-  // Run optimization for all schools
+  // Run optimization for all schools (both regular and minimal)
   const runOptimization = async () => {
     const schoolsToOptimize = currentSchool ? [currentSchool] : schools
     if (schoolsToOptimize.length === 0) return
 
     setOptimizing(true)
     const results = new Map<string, OptimizationResult>()
+    const minResults = new Map<string, MinimalOptimizationResult>()
 
     try {
       const dateStr = formatDate(currentDate)
 
       await Promise.all(schoolsToOptimize.map(async (school) => {
         try {
-          const res = await fetch('/api/calendar/optimize', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ school_id: school.id, date: dateStr })
-          })
+          // Fetch both regular and minimal optimization in parallel
+          const [regularRes, minimalRes] = await Promise.all([
+            fetch('/api/calendar/optimize', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ school_id: school.id, date: dateStr })
+            }),
+            fetch('/api/calendar/optimize-minimal', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ school_id: school.id, date: dateStr })
+            })
+          ])
 
-          if (res.ok) {
-            const data = await res.json()
+          if (regularRes.ok) {
+            const data = await regularRes.json()
             results.set(school.id, data)
+          }
+          if (minimalRes.ok) {
+            const data = await minimalRes.json()
+            minResults.set(school.id, data)
           }
         } catch (err) {
           console.error(`Error optimizing for school ${school.id}:`, err)
@@ -244,6 +293,7 @@ export default function CalendarPage() {
       }))
 
       setOptimizationResults(results)
+      setMinimalResults(minResults)
     } catch (error) {
       console.error('Error running optimization:', error)
     } finally {
@@ -606,6 +656,36 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {/* Scenario Toggle - Only show after optimization has run */}
+      {minimalResults.size > 0 && (
+        <div className="mb-6 flex items-center gap-4">
+          <span className="text-sm font-medium text-gray-700">View Scenario:</span>
+          <div className="flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setScenarioMode('actual')}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                scenarioMode === 'actual' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Actual Staff
+            </button>
+            <button
+              onClick={() => setScenarioMode('optimized')}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                scenarioMode === 'optimized' ? 'bg-orange-500 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Minimal Staff (Hypothetical)
+            </button>
+          </div>
+          {scenarioMode === 'optimized' && (
+            <span className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
+              This shows the minimum staff needed to maintain ratios
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Staffing Alerts */}
       {getAllAlerts().length > 0 && showAlerts && (
         <div className="mb-6 space-y-3">
@@ -679,39 +759,53 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* Day View - Timeline Mode (Hour-based grid) */}
-      {view === 'day' && dayViewMode === 'timeline' && (
-        <div className="flex flex-col gap-6">
-          {getScheduleWithBreaks().map((schedule) => (
-            <SchoolTimelineCard key={schedule.school.id} schedule={schedule} />
+      {/* ACTUAL SCENARIO - Regular schedule views */}
+      {scenarioMode === 'actual' && (
+        <>
+          {/* Day View - Timeline Mode (Hour-based grid) */}
+          {view === 'day' && dayViewMode === 'timeline' && (
+            <div className="flex flex-col gap-6">
+              {getScheduleWithBreaks().map((schedule) => (
+                <SchoolTimelineCard key={schedule.school.id} schedule={schedule} />
+              ))}
+            </div>
+          )}
+
+          {/* Day View - Schedule Mode (Block-based) */}
+          {view === 'day' && dayViewMode === 'schedule' && (
+            <div className="flex flex-col gap-6">
+              {getScheduleWithBreaks().map((schedule) => (
+                <SchoolDayCard key={schedule.school.id} schedule={schedule} formatTimeRange={formatTimeRange} />
+              ))}
+            </div>
+          )}
+
+          {/* Week View (simplified) */}
+          {view === 'week' && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <p className="text-gray-500 text-center">Week view coming soon. Use Day view for detailed schedules.</p>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {getScheduleWithBreaks().length === 0 && !loading && (
+            <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+              <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <p className="text-gray-500">No schedules available</p>
+              <p className="text-sm text-gray-400 mt-1">Staff schedules will appear here once created</p>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* OPTIMIZED SCENARIO - Minimal staff view */}
+      {scenarioMode === 'optimized' && minimalResults.size > 0 && (
+        <div className="space-y-6">
+          {Array.from(minimalResults.entries()).map(([schoolId, result]) => (
+            <MinimalScenarioCard key={schoolId} result={result} getShortName={getShortName} />
           ))}
-        </div>
-      )}
-
-      {/* Day View - Schedule Mode (Block-based) */}
-      {view === 'day' && dayViewMode === 'schedule' && (
-        <div className="flex flex-col gap-6">
-          {getScheduleWithBreaks().map((schedule) => (
-            <SchoolDayCard key={schedule.school.id} schedule={schedule} formatTimeRange={formatTimeRange} />
-          ))}
-        </div>
-      )}
-
-      {/* Week View (simplified) */}
-      {view === 'week' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <p className="text-gray-500 text-center">Week view coming soon. Use Day view for detailed schedules.</p>
-        </div>
-      )}
-
-      {/* Empty state */}
-      {getScheduleWithBreaks().length === 0 && !loading && (
-        <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-          <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          <p className="text-gray-500">No schedules available</p>
-          <p className="text-sm text-gray-400 mt-1">Staff schedules will appear here once created</p>
         </div>
       )}
     </div>
@@ -921,6 +1015,151 @@ function SchoolDayCard({
           No staff schedules for this day
         </div>
       )}
+    </div>
+  )
+}
+
+// Minimal Scenario Card - Shows hypothetical minimal staff schedule
+function MinimalScenarioCard({
+  result,
+  getShortName
+}: {
+  result: MinimalOptimizationResult
+  getShortName: (name: string) => string
+}) {
+  const formatTimeDisplay = (time: string): string => {
+    const [hours, minutes] = time.split(':')
+    const h = parseInt(hours)
+    const m = minutes || '00'
+    const hour = h > 12 ? h - 12 : h === 0 ? 12 : h
+    const ampm = h >= 12 ? 'pm' : 'am'
+    return m === '00' ? `${hour}${ampm}` : `${hour}:${m}${ampm}`
+  }
+
+  return (
+    <div className="bg-white rounded-xl border-2 border-orange-300 overflow-hidden">
+      {/* School Header with savings summary */}
+      <div className="bg-orange-100 px-4 py-3 border-b border-orange-200">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">
+            {getShortName(result.school_name)} - Minimal Staff Scenario
+          </h2>
+          <div className="flex items-center gap-4">
+            <div className="text-center">
+              <span className="text-2xl font-bold text-gray-600">{result.current_teachers}</span>
+              <span className="text-xs text-gray-500 block">Current</span>
+            </div>
+            <svg className="w-6 h-6 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+            <div className="text-center">
+              <span className="text-2xl font-bold text-orange-600">{result.minimal_teachers_needed}</span>
+              <span className="text-xs text-gray-500 block">Minimal</span>
+            </div>
+            {result.potential_savings > 0 && (
+              <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold">
+                Save {result.potential_savings} position{result.potential_savings > 1 ? 's' : ''}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Warnings */}
+      {result.warnings.length > 0 && (
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2">
+          {result.warnings.map((warning, idx) => (
+            <p key={idx} className="text-sm text-yellow-800">⚠️ {warning}</p>
+          ))}
+        </div>
+      )}
+
+      {/* Essential Teachers Section */}
+      <div className="p-4">
+        <h3 className="text-sm font-semibold text-green-700 mb-3 flex items-center gap-2">
+          <span className="w-3 h-3 bg-green-500 rounded-full"></span>
+          Essential Staff ({result.essential_teachers.length})
+        </h3>
+
+        {/* Essential Teachers Table */}
+        <div className="overflow-x-auto mb-6">
+          <table className="w-full border-collapse">
+            <tbody>
+              {result.essential_teachers.map((teacher) => (
+                <tr key={teacher.teacher_id} className="border-t border-gray-200">
+                  <td className="w-32 min-w-[128px] px-3 py-3 font-bold text-gray-900 border-r border-gray-200 bg-green-50 align-top text-sm">
+                    <div>{teacher.teacher_name.split(' ')[0]}</div>
+                    <div className="text-xs font-normal text-green-700">{teacher.reason.split(' - ')[0]}</div>
+                  </td>
+                  {teacher.blocks.map((block, idx) => (
+                    <td
+                      key={idx}
+                      className={`min-w-[130px] px-3 py-2 border-r border-gray-200 align-top ${
+                        block.type === 'break' ? 'bg-yellow-50' :
+                        block.type === 'lunch' ? 'bg-blue-50' :
+                        'bg-white'
+                      }`}
+                    >
+                      <div className="font-bold text-gray-900 text-sm whitespace-nowrap">
+                        {formatTimeDisplay(block.start_time)} - {formatTimeDisplay(block.end_time)}
+                      </div>
+                      {block.type === 'break' && (
+                        <div className="text-yellow-700 font-semibold text-xs">10 minute break</div>
+                      )}
+                      {block.type === 'lunch' && (
+                        <div className="text-blue-700 font-semibold text-xs">Lunch break</div>
+                      )}
+                      {block.type === 'work' && block.classroom_name && (
+                        <div className="text-gray-600 text-xs">{block.classroom_name}</div>
+                      )}
+                    </td>
+                  ))}
+                  <td className="bg-gray-50"></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Surplus Teachers Section */}
+        {result.surplus_teachers.length > 0 && (
+          <>
+            <h3 className="text-sm font-semibold text-red-700 mb-3 flex items-center gap-2">
+              <span className="w-3 h-3 bg-red-500 rounded-full"></span>
+              Potentially Surplus Staff ({result.surplus_teachers.length})
+            </h3>
+            <div className="bg-red-50 rounded-lg border border-red-200 p-4">
+              <p className="text-xs text-red-600 mb-3">
+                These positions could potentially be reduced while maintaining required ratios:
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {result.surplus_teachers.map((teacher) => (
+                  <div key={teacher.id} className="bg-white rounded-lg border border-red-200 p-3">
+                    <div className="font-semibold text-gray-900">{teacher.name}</div>
+                    <div className="text-xs text-gray-600 mt-1">{teacher.reason}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Legend */}
+      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex gap-6 text-xs">
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-green-50 border border-green-300 rounded"></div>
+          <span className="text-gray-700 font-medium">Essential Staff</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-yellow-50 border border-yellow-300 rounded"></div>
+          <span className="text-gray-700 font-medium">10 min Break</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 bg-blue-50 border border-blue-300 rounded"></div>
+          <span className="text-gray-700 font-medium">Lunch</span>
+        </div>
+      </div>
     </div>
   )
 }
