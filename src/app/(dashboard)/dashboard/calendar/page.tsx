@@ -381,11 +381,7 @@ export default function CalendarPage() {
 
       {/* Day View - Timeline Mode (Hour-based grid) */}
       {view === 'day' && dayViewMode === 'timeline' && (
-        <div className={`grid gap-6 ${
-          schedules.length === 1 ? 'grid-cols-1' :
-          schedules.length === 2 ? 'grid-cols-1 lg:grid-cols-2' :
-          'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3'
-        }`}>
+        <div className="flex flex-col gap-6">
           {schedules.map((schedule) => (
             <SchoolTimelineCard key={schedule.school.id} schedule={schedule} />
           ))}
@@ -394,11 +390,7 @@ export default function CalendarPage() {
 
       {/* Day View - Schedule Mode (Block-based) */}
       {view === 'day' && dayViewMode === 'schedule' && (
-        <div className={`grid gap-6 ${
-          schedules.length === 1 ? 'grid-cols-1' :
-          schedules.length === 2 ? 'grid-cols-1 lg:grid-cols-2' :
-          'grid-cols-1 lg:grid-cols-2 xl:grid-cols-3'
-        }`}>
+        <div className="flex flex-col gap-6">
           {schedules.map((schedule) => (
             <SchoolDayCard key={schedule.school.id} schedule={schedule} formatTimeRange={formatTimeRange} />
           ))}
