@@ -251,12 +251,58 @@ export default function CalendarPage() {
   // Get all alerts across all schools
   const getAllAlerts = (): { school: string; alert: StaffingAlert }[] => {
     const alerts: { school: string; alert: StaffingAlert }[] = []
-    optimizationResults.forEach((result, schoolId) => {
+    optimizationResults.forEach((result) => {
       result.alerts.forEach(alert => {
         alerts.push({ school: result.school_name, alert })
       })
     })
     return alerts
+  }
+
+  // Get optimized breaks for a teacher
+  const getOptimizedBreaks = (schoolId: string, teacherId: string): OptimizedBreak | null => {
+    const result = optimizationResults.get(schoolId)
+    if (!result) return null
+    return result.breaks.find(b => b.teacher_id === teacherId) || null
+  }
+
+  // Build schedule with optimized breaks applied
+  const getScheduleWithBreaks = (): SchoolDaySchedule[] => {
+    if (optimizationResults.size === 0) return schedules
+
+    return schedules.map(schedule => {
+      const updatedStaff = schedule.staff.map(staffSchedule => {
+        const optimizedBreak = getOptimizedBreaks(schedule.school.id, staffSchedule.teacher.id)
+
+        if (!optimizedBreak) return staffSchedule
+
+        // Rebuild blocks with the optimized breaks
+        const teacher = staffSchedule.teacher
+        if (!teacher.regular_shift_start || !teacher.regular_shift_end) return staffSchedule
+
+        const newBlocks = buildTimeSegments(
+          teacher.regular_shift_start,
+          teacher.regular_shift_end,
+          optimizedBreak.break1_start,
+          optimizedBreak.break1_end,
+          teacher.lunch_break_start,
+          teacher.lunch_break_end,
+          optimizedBreak.break2_start,
+          optimizedBreak.break2_end,
+          teacher.classroom_title
+        )
+
+        return {
+          ...staffSchedule,
+          blocks: newBlocks.sort((a, b) => a.start_time.localeCompare(b.start_time))
+        }
+      })
+
+      return {
+        ...schedule,
+        staff: updatedStaff
+      }
+    })
   }
 
   useEffect(() => {
@@ -631,7 +677,7 @@ export default function CalendarPage() {
       {/* Day View - Timeline Mode (Hour-based grid) */}
       {view === 'day' && dayViewMode === 'timeline' && (
         <div className="flex flex-col gap-6">
-          {schedules.map((schedule) => (
+          {getScheduleWithBreaks().map((schedule) => (
             <SchoolTimelineCard key={schedule.school.id} schedule={schedule} />
           ))}
         </div>
@@ -640,7 +686,7 @@ export default function CalendarPage() {
       {/* Day View - Schedule Mode (Block-based) */}
       {view === 'day' && dayViewMode === 'schedule' && (
         <div className="flex flex-col gap-6">
-          {schedules.map((schedule) => (
+          {getScheduleWithBreaks().map((schedule) => (
             <SchoolDayCard key={schedule.school.id} schedule={schedule} formatTimeRange={formatTimeRange} />
           ))}
         </div>
@@ -654,7 +700,7 @@ export default function CalendarPage() {
       )}
 
       {/* Empty state */}
-      {schedules.length === 0 && !loading && (
+      {getScheduleWithBreaks().length === 0 && !loading && (
         <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
           <svg className="w-12 h-12 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
