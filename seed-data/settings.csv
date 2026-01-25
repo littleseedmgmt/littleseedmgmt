@@ -1,0 +1,19 @@
+Setting Category,Setting Name,Parameter,Value
+Awake Time Ratios,ratio_normal,infant,4
+Awake Time Ratios,ratio_normal,toddler,4
+Awake Time Ratios,ratio_normal,twos,12
+Awake Time Ratios,ratio_normal,threes,12
+Awake Time Ratios,ratio_normal,preschool,12
+Awake Time Ratios,ratio_normal,pre_k,12
+Nap Time Ratios,ratio_naptime,infant,12
+Nap Time Ratios,ratio_naptime,toddler,12
+Nap Time Ratios,ratio_naptime,twos,24
+Nap Time Ratios,ratio_naptime,threes,24
+Nap Time Ratios,ratio_naptime,preschool,24
+Nap Time Ratios,ratio_naptime,pre_k,24
+Break Settings,break_settings,break_duration_minutes,10
+Break Settings,break_settings,breaks_per_shift,2
+Nap Window,default_nap_window,default_start,12:00
+Nap Window,default_nap_window,default_end,14:30
+School Hours,school_hours,opens_at,07:30
+School Hours,school_hours,closes_at,17:30

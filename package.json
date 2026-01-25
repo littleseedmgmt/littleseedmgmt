@@ -8,8 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "db:push": "npx supabase db push",
-    "db:seed": "echo 'Run seed via API: curl -X POST http://localhost:3000/api/dev/seed'",
-    "db:clear": "echo 'Run clear via API: curl -X DELETE http://localhost:3000/api/dev/seed'"
+    "db:reset": "npx supabase db execute --file supabase/seed-real-data.sql",
+    "db:seed": "echo 'Run seed via API: curl -X POST http://localhost:3005/api/dev/seed'",
+    "db:clear": "echo 'Run clear via API: curl -X DELETE http://localhost:3005/api/dev/seed'"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
@@ -24,6 +25,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.1.4",
     "tailwindcss": "^4",

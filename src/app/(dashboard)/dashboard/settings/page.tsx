@@ -45,6 +45,7 @@ export default function SettingsPage() {
   const { user, userRole, isOwner } = useAuth()
   const [seeding, setSeeding] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   // School rules state
@@ -154,6 +155,52 @@ export default function SettingsPage() {
       setMessage({ type: 'error', text: 'Failed to clear data' })
     } finally {
       setClearing(false)
+    }
+  }
+
+  const handleResetToBaseline = async () => {
+    // Double confirmation for dangerous operation
+    const firstConfirm = confirm(
+      '⚠️ WARNING: Reset to Baseline\n\n' +
+      'This will DELETE ALL DATA including:\n' +
+      '• All attendance records\n' +
+      '• All shifts\n' +
+      '• All PTO requests\n' +
+      '• Any changes to schools, teachers, students\n\n' +
+      'Everything will be restored to the original baseline dataset.\n\n' +
+      'Are you sure you want to continue?'
+    )
+
+    if (!firstConfirm) return
+
+    const secondConfirm = confirm(
+      '🚨 FINAL CONFIRMATION\n\n' +
+      'Type OK to confirm you want to reset ALL data to baseline.\n\n' +
+      'This action cannot be undone!'
+    )
+
+    if (!secondConfirm) return
+
+    setResetting(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/dev/reset', { method: 'POST' })
+      const data = await res.json()
+
+      if (res.ok) {
+        setMessage({
+          type: 'success',
+          text: `Reset complete! Restored: ${data.results.schools} schools, ${data.results.classrooms} classrooms, ${data.results.teachers} teachers. ${data.results.note || ''}`
+        })
+        // Refresh the page after a short delay to reload all data
+        setTimeout(() => window.location.reload(), 2000)
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to reset' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to reset to baseline' })
+    } finally {
+      setResetting(false)
     }
   }
 
@@ -487,6 +534,38 @@ export default function SettingsPage() {
           <div className="mt-4 text-xs text-amber-600">
             <p><strong>Generate Test Data:</strong> Creates 14 days of attendance, 1 week of shifts, and PTO requests</p>
             <p><strong>Clear Test Data:</strong> Removes all attendance, shifts, and PTO requests (keeps schools, teachers, students)</p>
+          </div>
+
+          {/* Danger Zone - Reset to Baseline */}
+          <div className="mt-6 pt-6 border-t border-red-200">
+            <div className="flex items-center gap-2 mb-3">
+              <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <h3 className="text-sm font-semibold text-red-700">Danger Zone</h3>
+            </div>
+            <p className="text-xs text-red-600 mb-3">
+              Reset everything to the original baseline dataset. This will <strong>delete ALL data</strong> (attendance, shifts, PTO, and any changes to schools/teachers/students) and restore the original test data.
+            </p>
+            <button
+              onClick={handleResetToBaseline}
+              disabled={seeding || clearing || resetting}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium"
+            >
+              {resetting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Resetting...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Reset to Baseline
+                </>
+              )}
+            </button>
           </div>
         </div>
       )}
