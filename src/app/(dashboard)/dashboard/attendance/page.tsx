@@ -208,6 +208,16 @@ export default function AttendancePage() {
     return name
   }
 
+  const formatDateWithDay = (dateStr: string) => {
+    const d = new Date(dateStr + 'T00:00:00')
+    return d.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })
+  }
+
   useEffect(() => {
     const fetchData = async () => {
       if (authLoading) return
@@ -267,46 +277,49 @@ export default function AttendancePage() {
         </div>
 
         {/* Date Picker */}
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => {
-              const d = new Date(date)
-              d.setDate(d.getDate() - 1)
-              setDate(d.toISOString().split('T')[0])
-            }}
-            className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50"
-          >
-            <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
+        <div className="flex flex-col items-end gap-2">
+          <span className="text-lg font-medium text-gray-700">{formatDateWithDay(date)}</span>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => {
+                const d = new Date(date)
+                d.setDate(d.getDate() - 1)
+                setDate(d.toISOString().split('T')[0])
+              }}
+              className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50"
+            >
+              <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
 
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand/50"
-          />
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand/50"
+            />
 
-          <button
-            onClick={() => {
-              const d = new Date(date)
-              d.setDate(d.getDate() + 1)
-              setDate(d.toISOString().split('T')[0])
-            }}
-            className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50"
-          >
-            <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+            <button
+              onClick={() => {
+                const d = new Date(date)
+                d.setDate(d.getDate() + 1)
+                setDate(d.toISOString().split('T')[0])
+              }}
+              className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50"
+            >
+              <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
 
-          <button
-            onClick={() => setDate(new Date().toISOString().split('T')[0])}
-            className="px-4 py-2 text-sm font-medium text-brand border border-brand rounded-lg hover:bg-brand/5"
-          >
-            Today
-          </button>
+            <button
+              onClick={() => setDate(new Date().toISOString().split('T')[0])}
+              className="px-4 py-2 text-sm font-medium text-brand border border-brand rounded-lg hover:bg-brand/5"
+            >
+              Today
+            </button>
+          </div>
         </div>
       </div>
 
