@@ -155,12 +155,13 @@ export async function POST(request: NextRequest) {
     const school = schoolData as { id: string; name: string }
 
     // Fetch remaining data in parallel (all array queries)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const [teachersRes, classroomsRes, studentsRes, attendanceRes, settingsRes] = await Promise.all([
       supabase.from('teachers').select('*').eq('school_id', school_id).eq('status', 'active'),
       supabase.from('classrooms').select('*').eq('school_id', school_id),
       supabase.from('students').select('*').eq('school_id', school_id).eq('status', 'enrolled'),
       supabase.from('attendance').select('*').eq('school_id', school_id).eq('date', date).eq('status', 'present'),
-      supabase.from('school_settings').select('*').or(`school_id.is.null,school_id.eq.${school_id}`)
+      (supabase as any).from('school_settings').select('*').or(`school_id.is.null,school_id.eq.${school_id}`)
     ])
 
     const teachers = (teachersRes.data || []) as Teacher[]

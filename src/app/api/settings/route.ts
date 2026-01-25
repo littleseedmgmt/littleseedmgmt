@@ -24,7 +24,8 @@ export async function GET(request: NextRequest) {
     const settingKey = searchParams.get('key')
 
     // Get global settings (school_id IS NULL) and school-specific settings
-    let query = supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query = (supabase as any)
       .from('school_settings')
       .select('*')
       .order('setting_key')
@@ -92,7 +93,8 @@ export async function PUT(request: NextRequest) {
     }
 
     // Upsert the setting
-    const { data, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
       .from('school_settings')
       .upsert({
         school_id: school_id || null,
