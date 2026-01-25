@@ -138,6 +138,34 @@ const HOUR_SLOTS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
 
 type DayViewMode = 'schedule' | 'timeline'
 
+interface OptimizedBreak {
+  teacher_id: string
+  teacher_name: string
+  break1_start: string
+  break1_end: string
+  break2_start: string
+  break2_end: string
+}
+
+interface StaffingAlert {
+  type: 'surplus' | 'shortage'
+  message: string
+  count: number
+  time_range?: string
+}
+
+interface OptimizationResult {
+  success: boolean
+  school_name: string
+  breaks: OptimizedBreak[]
+  alerts: StaffingAlert[]
+  coverage_summary: {
+    total_teachers: number
+    teachers_needed_peak: number
+    teachers_needed_nap: number
+  }
+}
+
 export default function CalendarPage() {
   const { schools, currentSchool, isOwner, loading: authLoading } = useAuth()
   const { markDataReady } = useComponentPerf('CalendarPage')
@@ -146,6 +174,11 @@ export default function CalendarPage() {
   const [dayViewMode, setDayViewMode] = useState<DayViewMode>('timeline')
   const [schedules, setSchedules] = useState<SchoolDaySchedule[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Optimization state
+  const [optimizing, setOptimizing] = useState(false)
+  const [optimizationResults, setOptimizationResults] = useState<Map<string, OptimizationResult>>(new Map())
+  const [showAlerts, setShowAlerts] = useState(true)
 
   const getShortName = (name: string) => {
     if (name === 'Peter Pan Mariner Square') return 'Mariner Square'
@@ -177,6 +210,53 @@ export default function CalendarPage() {
 
   const goToToday = () => {
     setCurrentDate(new Date())
+  }
+
+  // Run optimization for all schools
+  const runOptimization = async () => {
+    const schoolsToOptimize = currentSchool ? [currentSchool] : schools
+    if (schoolsToOptimize.length === 0) return
+
+    setOptimizing(true)
+    const results = new Map<string, OptimizationResult>()
+
+    try {
+      const dateStr = formatDate(currentDate)
+
+      await Promise.all(schoolsToOptimize.map(async (school) => {
+        try {
+          const res = await fetch('/api/calendar/optimize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ school_id: school.id, date: dateStr })
+          })
+
+          if (res.ok) {
+            const data = await res.json()
+            results.set(school.id, data)
+          }
+        } catch (err) {
+          console.error(`Error optimizing for school ${school.id}:`, err)
+        }
+      }))
+
+      setOptimizationResults(results)
+    } catch (error) {
+      console.error('Error running optimization:', error)
+    } finally {
+      setOptimizing(false)
+    }
+  }
+
+  // Get all alerts across all schools
+  const getAllAlerts = (): { school: string; alert: StaffingAlert }[] => {
+    const alerts: { school: string; alert: StaffingAlert }[] = []
+    optimizationResults.forEach((result, schoolId) => {
+      result.alerts.forEach(alert => {
+        alerts.push({ school: result.school_name, alert })
+      })
+    })
+    return alerts
   }
 
   useEffect(() => {
@@ -450,9 +530,103 @@ export default function CalendarPage() {
             >
               Today
             </button>
+
+            {/* Recalculate Button */}
+            <button
+              onClick={runOptimization}
+              disabled={optimizing}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand/90 disabled:opacity-50"
+            >
+              {optimizing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Calculating...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Recalculate
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Staffing Alerts */}
+      {getAllAlerts().length > 0 && showAlerts && (
+        <div className="mb-6 space-y-3">
+          {getAllAlerts().map((item, idx) => (
+            <div
+              key={idx}
+              className={`flex items-center justify-between p-4 rounded-lg border ${
+                item.alert.type === 'surplus'
+                  ? 'bg-blue-50 border-blue-200'
+                  : 'bg-red-50 border-red-200'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                {item.alert.type === 'surplus' ? (
+                  <div className="p-2 bg-blue-100 rounded-full">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                  </div>
+                ) : (
+                  <div className="p-2 bg-red-100 rounded-full">
+                    <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                )}
+                <div>
+                  <p className={`font-medium ${item.alert.type === 'surplus' ? 'text-blue-900' : 'text-red-900'}`}>
+                    {item.school}: {item.alert.type === 'surplus' ? 'Teacher Surplus' : 'Teacher Shortage'}
+                  </p>
+                  <p className={`text-sm ${item.alert.type === 'surplus' ? 'text-blue-700' : 'text-red-700'}`}>
+                    {item.alert.message}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAlerts(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Coverage Summary */}
+      {optimizationResults.size > 0 && (
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          {Array.from(optimizationResults.entries()).map(([schoolId, result]) => (
+            <div key={schoolId} className="bg-white rounded-lg border border-gray-200 p-4">
+              <h3 className="font-medium text-gray-900 mb-2">{getShortName(result.school_name)}</h3>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <p className="text-2xl font-bold text-brand">{result.coverage_summary.total_teachers}</p>
+                  <p className="text-xs text-gray-500">Available</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-700">{result.coverage_summary.teachers_needed_peak}</p>
+                  <p className="text-xs text-gray-500">Peak Need</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-blue-600">{result.coverage_summary.teachers_needed_nap}</p>
+                  <p className="text-xs text-gray-500">Nap Time</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Day View - Timeline Mode (Hour-based grid) */}
       {view === 'day' && dayViewMode === 'timeline' && (
