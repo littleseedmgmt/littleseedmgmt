@@ -91,11 +91,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     )
 
-    // Fallback: if onAuthStateChange doesn't fire within 3 seconds, stop loading
-    const fallbackTimer = setTimeout(() => {
+    // Fallback: if onAuthStateChange doesn't fire within 3 seconds, try getSession directly
+    const fallbackTimer = setTimeout(async () => {
       if (!initialCheckDone && isMounted) {
-        console.warn('[Auth] Auth listener timeout - stopping loading state')
-        setLoading(false)
+        console.warn('[Auth] Auth listener timeout - trying getSession fallback...')
+        try {
+          const { data: { session } } = await supabase.auth.getSession()
+          console.log('[Auth] Fallback getSession result:', session ? 'has session' : 'no session')
+          if (session?.user && isMounted) {
+            setUser(session.user)
+            await fetchUserRoleAndSchools(session.user.id)
+          }
+        } catch (e) {
+          console.error('[Auth] Fallback getSession failed:', e)
+        }
+        if (isMounted) setLoading(false)
       }
     }, 3000)
 
