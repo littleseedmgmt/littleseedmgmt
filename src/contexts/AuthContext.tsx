@@ -116,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const supabase = createClient()
 
     try {
+      console.log('[Auth] Fetching user roles...')
       // Fetch user roles
       const { data: roles, error: rolesError } = await supabase
         .from('user_roles')
@@ -123,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('user_id', userId)
         .returns<UserRoleRecord[]>()
 
+      console.log('[Auth] Roles fetched:', roles?.length || 0, 'error:', rolesError?.message)
       if (rolesError) throw rolesError
 
       if (roles && roles.length > 0) {
@@ -136,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      console.log('[Auth] Fetching schools...')
       // Fetch accessible schools
       const { data: schoolsData, error: schoolsError } = await supabase
         .from('schools')
@@ -143,9 +146,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .eq('status', 'active')
         .order('name')
 
+      console.log('[Auth] Schools fetched:', schoolsData?.length || 0, 'error:', schoolsError?.message)
       if (schoolsError) throw schoolsError
 
       if (schoolsData) {
+        console.log('[Auth] Setting schools in state:', schoolsData.length)
         setSchools(schoolsData)
         // If only one school, set it as current
         if (schoolsData.length === 1) {
