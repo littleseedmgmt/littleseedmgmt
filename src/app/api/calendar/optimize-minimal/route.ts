@@ -158,17 +158,47 @@ export async function POST(request: NextRequest) {
     const classrooms = (classroomsRes.data || []) as Classroom[]
     const students = (studentsRes.data || []) as Student[]
     const attendance = (attendanceRes.data || []) as { student_id: string }[]
-    const settings = (settingsRes.data || []) as { setting_key: string; setting_value: RatioSettings }[]
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const settings = (settingsRes.data || []) as { setting_key: string; setting_value: any }[]
 
     // Get ratio settings
     const normalRatiosSetting = settings.find((s: { setting_key: string }) => s.setting_key === 'ratio_normal')
     const napRatiosSetting = settings.find((s: { setting_key: string }) => s.setting_key === 'ratio_naptime')
+    const playgroundTimesSetting = settings.find((s: { setting_key: string }) => s.setting_key === 'playground_times')
 
     const normalRatios: RatioSettings = normalRatiosSetting?.setting_value || {
       infant: 4, toddler: 4, twos: 12, threes: 12, preschool: 12, pre_k: 12
     }
     const napRatios: RatioSettings = napRatiosSetting?.setting_value || {
       infant: 12, toddler: 12, twos: 24, threes: 24, preschool: 24, pre_k: 24
+    }
+
+    // Playground/outdoor times - when classrooms with same ratio can be combined
+    interface PlaygroundPeriod {
+      start: string
+      end: string
+      age_groups: string[]
+    }
+    interface PlaygroundTimes {
+      morning?: PlaygroundPeriod
+      afternoon?: PlaygroundPeriod
+    }
+    const playgroundTimes: PlaygroundTimes = playgroundTimesSetting?.setting_value || {
+      morning: { start: '09:30', end: '11:00', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] },
+      afternoon: { start: '15:30', end: '16:30', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] }
+    }
+
+    // Helper: Check if a time is during playground time for a specific age group
+    const isDuringPlayground = (timeMinutes: number, ageGroup: string): boolean => {
+      for (const period of Object.values(playgroundTimes)) {
+        if (!period) continue
+        const start = timeToMinutes(period.start)
+        const end = timeToMinutes(period.end)
+        if (timeMinutes >= start && timeMinutes < end && period.age_groups.includes(ageGroup)) {
+          return true
+        }
+      }
+      return false
     }
 
     const warnings: string[] = []
@@ -289,16 +319,74 @@ export async function POST(request: NextRequest) {
       return Math.ceil(studentCount / ratio)
     }
 
+    // Helper: Get ratio for an age group
+    const getRatioForAgeGroup = (ageGroup: string, isNapTime: boolean): number => {
+      const ratios = isNapTime ? napRatios : normalRatios
+      return ratios[ageGroup] || 12
+    }
+
+    // Helper: Get list of teachers who are "freed" during playground time
+    const getFreedTeachersDuringPlayground = (timeMinutes: number): Set<string> => {
+      const freedTeachers = new Set<string>()
+
+      // Group classrooms by their ratio requirement
+      const classroomsByRatio = new Map<number, { classroom: Classroom; studentCount: number; teachers: Teacher[] }[]>()
+
+      for (const classroom of classrooms) {
+        const ageGroup = classroom.age_group
+        if (!isDuringPlayground(timeMinutes, ageGroup)) continue
+
+        const studentCount = (studentsByClassroom.get(classroom.id) || []).length
+        if (studentCount === 0) continue
+
+        const isNapTime = isDuringNapForClassroom(timeMinutes, presentStudents, classroom.id)
+        const ratio = getRatioForAgeGroup(ageGroup, isNapTime)
+
+        // Find teachers assigned to this classroom (only essential ones in minimal scenario)
+        const classroomTeachers = workingTeachers.filter(t =>
+          essentialTeacherIds.has(t.id) && t.classroom_title === classroom.name
+        )
+
+        const existing = classroomsByRatio.get(ratio) || []
+        existing.push({ classroom, studentCount, teachers: classroomTeachers })
+        classroomsByRatio.set(ratio, existing)
+      }
+
+      // For each ratio group, determine which teachers are freed
+      for (const [ratio, rooms] of classroomsByRatio) {
+        if (rooms.length <= 1) continue
+
+        const totalStudents = rooms.reduce((sum, r) => sum + r.studentCount, 0)
+        const combinedTeachers = Math.ceil(totalStudents / ratio)
+        const allTeachers = rooms.flatMap(r => r.teachers)
+
+        if (allTeachers.length > combinedTeachers) {
+          const freedCount = allTeachers.length - combinedTeachers
+          for (let i = allTeachers.length - freedCount; i < allTeachers.length; i++) {
+            freedTeachers.add(allTeachers[i].id)
+          }
+        }
+      }
+
+      return freedTeachers
+    }
+
     // Helper: Check if a teacher can substitute for someone in a different classroom
     // STRICT RULE: Only directors/floaters can cover OTHER classrooms
-    // Teachers with assigned classrooms can only cover within their own classroom
-    const canTeacherSubstitute = (substitute: Teacher, teacherOnBreak: Teacher): boolean => {
+    // EXCEPTION: During playground time, freed teachers from combined classrooms can help
+    const canTeacherSubstitute = (substitute: Teacher, teacherOnBreak: Teacher, breakTime: number): boolean => {
       // Directors and assistant directors can always help anyone
       if (substitute.role === 'director' || substitute.role === 'assistant_director') return true
       // Teachers without a classroom assignment (floaters) can help anyone
       if (!substitute.classroom_title) return true
       // Teachers WITH a classroom can only substitute for someone in the SAME classroom
       if (substitute.classroom_title === teacherOnBreak.classroom_title) return true
+
+      // PLAYGROUND OPTIMIZATION: During playground time, teachers who are "freed"
+      // due to combined ratios can substitute for others
+      const freedTeachers = getFreedTeachersDuringPlayground(breakTime)
+      if (freedTeachers.has(substitute.id)) return true
+
       // Different classrooms - cannot substitute
       return false
     }
@@ -358,8 +446,8 @@ export async function POST(request: NextRequest) {
         if (isInfantRoom && !isInfantQualified(sub)) continue
 
         // CRITICAL: Check if this teacher can substitute
-        // Only directors, floaters, or same-classroom teachers can substitute
-        if (!canTeacherSubstitute(sub, teacherOnBreak)) continue
+        // Only directors, floaters, same-classroom teachers, or freed playground teachers can substitute
+        if (!canTeacherSubstitute(sub, teacherOnBreak, breakTime)) continue
 
         // Found a valid substitute - record the assignment
         recordSubstituteAssignment(sub.id, breakTime, breakEndTime)
