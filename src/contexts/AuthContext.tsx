@@ -45,7 +45,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user && isMounted) {
           setUser(session.user)
+          // Wait for schools to load before marking as done
           await fetchUserRoleAndSchools(session.user.id)
+          if (isMounted) setLoading(false)
+        } else {
+          // No session - done loading
+          if (isMounted) setLoading(false)
         }
       } catch (error) {
         // Ignore AbortError - it's usually from React strict mode or navigation
@@ -54,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           console.error('Error initializing auth:', error)
         }
-      } finally {
+        // Even on error, stop loading
         if (isMounted) setLoading(false)
       }
     }
