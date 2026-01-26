@@ -250,6 +250,62 @@ export async function POST(request: NextRequest) {
     // Track break assignments for all essential teachers (to check for conflicts)
     const breakAssignments = new Map<string, { break1: number; break2: number; lunchStart?: number; lunchEnd?: number }>()
 
+    // Helper: Check if teacher is on break at a given time
+    const isTeacherOnBreak = (teacherId: string, timeMinutes: number): boolean => {
+      const assignment = breakAssignments.get(teacherId)
+      if (!assignment) return false
+      if (timeMinutes >= assignment.break1 && timeMinutes < assignment.break1 + 10) return true
+      if (timeMinutes >= assignment.break2 && timeMinutes < assignment.break2 + 10) return true
+      if (assignment.lunchStart !== undefined && assignment.lunchEnd !== undefined) {
+        if (timeMinutes >= assignment.lunchStart && timeMinutes < assignment.lunchEnd) return true
+      }
+      return false
+    }
+
+    // Helper: Count teachers currently available in a classroom at a given time
+    const getClassroomTeacherCount = (classroomName: string, timeMinutes: number): number => {
+      let count = 0
+      for (const teacher of workingTeachers) {
+        if (!essentialTeacherIds.has(teacher.id)) continue // Only count essential teachers in minimal scenario
+        if (teacher.classroom_title !== classroomName) continue
+        if (!isTeacherWorking(teacher, timeMinutes)) continue
+        if (isTeacherOnBreak(teacher.id, timeMinutes)) continue
+        if (isSubstituteAssigned(teacher.id, timeMinutes, timeMinutes + 1)) continue
+        count++
+      }
+      return count
+    }
+
+    // Helper: Get required teachers for a classroom by name at a given time
+    const getRequiredTeachersForClassroom = (classroomName: string, timeMinutes: number): number => {
+      const classroom = classrooms.find(c => c.name === classroomName)
+      if (!classroom) return 0
+      const classroomStudents = studentsByClassroom.get(classroom.id) || []
+      const studentCount = classroomStudents.length
+      if (studentCount === 0) return 0
+      const isNapTime = isDuringNapForClassroom(timeMinutes, presentStudents, classroom.id)
+      const ageGroup = classroom.age_group as keyof RatioSettings
+      const ratio = isNapTime ? (napRatios[ageGroup] || 12) : (normalRatios[ageGroup] || 12)
+      return Math.ceil(studentCount / ratio)
+    }
+
+    // Helper: Check if a teacher can leave their classroom to substitute
+    const canTeacherLeaveClassroom = (teacher: Teacher, startTime: number, endTime: number): boolean => {
+      // Directors and assistant directors can always help
+      if (teacher.role === 'director' || teacher.role === 'assistant_director') return true
+      // Teachers without a classroom assignment (floaters) can always help
+      if (!teacher.classroom_title) return true
+      // For teachers with a classroom, check if they can leave throughout the coverage period
+      const checkTimes = [startTime, Math.floor((startTime + endTime) / 2), endTime - 1]
+      for (const checkTime of checkTimes) {
+        const currentTeachers = getClassroomTeacherCount(teacher.classroom_title, checkTime)
+        const requiredTeachers = getRequiredTeachersForClassroom(teacher.classroom_title, checkTime)
+        // Can only leave if there are more teachers than required (surplus)
+        if (currentTeachers <= requiredTeachers) return false
+      }
+      return true
+    }
+
     // Helper: Check if teacher has any break/lunch that overlaps with a time range
     const doesTeacherBreakOverlap = (teacher: Teacher, startTime: number, endTime: number): boolean => {
       const assignment = breakAssignments.get(teacher.id)
@@ -304,6 +360,10 @@ export async function POST(request: NextRequest) {
         // Check infant qualification if needed
         if (isInfantRoom && !isInfantQualified(sub)) continue
 
+        // CRITICAL: Check if this teacher can actually leave their classroom
+        // They can only substitute if their own classroom has surplus coverage
+        if (!canTeacherLeaveClassroom(sub, breakTime, breakEndTime)) continue
+
         // Found a valid substitute - record the assignment
         recordSubstituteAssignment(sub.id, breakTime, breakEndTime)
 
@@ -321,6 +381,7 @@ export async function POST(request: NextRequest) {
           if (doesTeacherBreakOverlap(director, breakTime, breakEndTime)) continue
           if (isSubstituteAssigned(director.id, breakTime, breakEndTime)) continue
           if (isInfantRoom && !isInfantQualified(director)) continue
+          // Directors don't need classroom check - they can always help
 
           recordSubstituteAssignment(director.id, breakTime, breakEndTime)
           return `${director.first_name} helps`
