@@ -390,14 +390,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Use actual essential_teachers count for consistency
+    // (the calculated minimalTeachersNeeded may differ from actual selection due to qualification constraints)
+    const actualMinimal = essentialTeachers.length
+    const actualSavings = surplusTeachers.length
+
     const result: MinimalOptimizationResult = {
       success: true,
       date,
       school_id,
       school_name: school.name,
       current_teachers: workingTeachers.length,
-      minimal_teachers_needed: minimalTeachersNeeded,
-      potential_savings: workingTeachers.length - minimalTeachersNeeded,
+      minimal_teachers_needed: actualMinimal,
+      potential_savings: actualSavings,
       essential_teachers: essentialTeachers,
       surplus_teachers: surplusTeachers,
       warnings

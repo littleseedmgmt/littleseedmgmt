@@ -122,9 +122,10 @@ export default function SettingsPage() {
       const data = await res.json()
 
       if (res.ok) {
+        const summary = data.summary
         setMessage({
           type: 'success',
-          text: `Test data generated: ${data.results.attendance} attendance records, ${data.results.shifts} shifts, ${data.results.pto} PTO requests`
+          text: `Test data generated for ${summary.total_weekdays} weekdays (${summary.dates_covered}): ${summary.attendance_records} attendance records, ${summary.shift_records} shifts, ${summary.pto_requests} PTO requests`
         })
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to seed data' })
@@ -144,9 +145,10 @@ export default function SettingsPage() {
       const data = await res.json()
 
       if (res.ok) {
+        const summary = data.summary
         setMessage({
           type: 'success',
-          text: `Teacher data generated: ${data.results.shifts} shifts, ${data.results.pto} PTO requests`
+          text: `Teacher data generated for ${summary.total_weekdays} weekdays (${summary.dates_covered}): ${summary.shift_records} shifts, ${summary.pto_requests} PTO requests`
         })
       } else {
         setMessage({ type: 'error', text: data.error || 'Failed to seed teacher data' })
@@ -575,8 +577,8 @@ export default function SettingsPage() {
           </div>
 
           <div className="mt-4 text-xs text-amber-600">
-            <p><strong>Generate All Test Data:</strong> Creates 14 days of student attendance + teacher shifts/PTO</p>
-            <p><strong>Generate Teacher Data Only:</strong> Creates only teacher shifts and PTO (use when student data exists)</p>
+            <p><strong>Generate All Test Data:</strong> Creates student attendance + teacher shifts/PTO for the last 15 calendar days (weekdays only)</p>
+            <p><strong>Generate Teacher Data Only:</strong> Creates only teacher shifts and PTO for the last 15 calendar days (weekdays only)</p>
             <p><strong>Clear Test Data:</strong> Removes all attendance, shifts, and PTO requests (keeps schools, teachers, students)</p>
           </div>
 

@@ -172,6 +172,7 @@ export async function POST(request: NextRequest) {
     const attendance = (attendanceRes.data || []) as { student_id: string }[]
     const settings = (settingsRes.data || []) as { setting_key: string; setting_value: RatioSettings }[]
 
+
     // Get ratio settings
     const normalRatiosSetting = settings.find((s: { setting_key: string }) => s.setting_key === 'ratio_normal')
     const napRatiosSetting = settings.find((s: { setting_key: string }) => s.setting_key === 'ratio_naptime')
@@ -184,8 +185,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Get present students (those with attendance marked)
-    const presentStudentIds = new Set(attendance.map(a => a.student_id))
-    const presentStudents = students.filter(s => presentStudentIds.has(s.id))
+    // If no attendance records for this date, assume all enrolled students are present
+    let presentStudents: Student[]
+    if (attendance.length === 0) {
+      // No attendance data - use all enrolled students for planning
+      presentStudents = students
+    } else {
+      const presentStudentIds = new Set(attendance.map(a => a.student_id))
+      presentStudents = students.filter(s => presentStudentIds.has(s.id))
+    }
 
     // Count students per classroom
     const studentsByClassroom = new Map<string, Student[]>()
@@ -408,6 +416,66 @@ export async function POST(request: NextRequest) {
         break2_end: minutesToTime(assignment.break2 + 10),
         break2_sub_name: break2Sub
       })
+    }
+
+    // Save optimized breaks to the shifts table
+    // This persists the optimization so it's available in future sessions
+    for (const optimizedBreak of optimizedBreaks) {
+      // Find the teacher to get their regular shift times
+      const teacher = workingTeachers.find(t => t.id === optimizedBreak.teacher_id)
+      if (!teacher) continue
+
+      // Try to update existing shift record
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingShift } = await (supabase as any)
+        .from('shifts')
+        .select('id')
+        .eq('teacher_id', optimizedBreak.teacher_id)
+        .eq('date', date)
+        .eq('school_id', school_id)
+        .single()
+
+      if (existingShift) {
+        // Update existing shift with optimized breaks
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: updateError } = await (supabase as any)
+          .from('shifts')
+          .update({
+            break1_start: optimizedBreak.break1_start,
+            break1_end: optimizedBreak.break1_end,
+            break2_start: optimizedBreak.break2_start,
+            break2_end: optimizedBreak.break2_end,
+          })
+          .eq('id', existingShift.id)
+
+        if (updateError) {
+          console.error(`[Optimize] Error updating shift for teacher ${optimizedBreak.teacher_id}:`, updateError)
+        }
+      } else {
+        // Create new shift record with optimized breaks
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: insertError } = await (supabase as any)
+          .from('shifts')
+          .insert({
+            school_id,
+            teacher_id: optimizedBreak.teacher_id,
+            date,
+            start_time: teacher.regular_shift_start,
+            end_time: teacher.regular_shift_end,
+            break1_start: optimizedBreak.break1_start,
+            break1_end: optimizedBreak.break1_end,
+            lunch_start: teacher.lunch_break_start,
+            lunch_end: teacher.lunch_break_end,
+            break2_start: optimizedBreak.break2_start,
+            break2_end: optimizedBreak.break2_end,
+            status: 'scheduled',
+            shift_type: 'regular',
+          })
+
+        if (insertError) {
+          console.error(`[Optimize] Error creating shift for teacher ${optimizedBreak.teacher_id}:`, insertError)
+        }
+      }
     }
 
     const result: OptimizationResult = {

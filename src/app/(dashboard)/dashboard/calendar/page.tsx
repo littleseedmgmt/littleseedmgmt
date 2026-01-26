@@ -213,7 +213,6 @@ export default function CalendarPage() {
   // Optimization state
   const [optimizing, setOptimizing] = useState(false)
   const [optimizationResults, setOptimizationResults] = useState<Map<string, OptimizationResult>>(new Map())
-  const [showAlerts, setShowAlerts] = useState(true)
 
   // Minimal optimization state
   const [scenarioMode, setScenarioMode] = useState<ScenarioMode>('actual')
@@ -245,6 +244,9 @@ export default function CalendarPage() {
     const newDate = new Date(currentDate)
     newDate.setDate(newDate.getDate() + direction)
     setCurrentDate(newDate)
+    // Clear optimization results when changing dates - they're date-specific
+    setOptimizationResults(new Map())
+    setMinimalResults(new Map())
   }
 
   const goToToday = () => {
@@ -299,17 +301,6 @@ export default function CalendarPage() {
     } finally {
       setOptimizing(false)
     }
-  }
-
-  // Get all alerts across all schools
-  const getAllAlerts = (): { school: string; alert: StaffingAlert }[] => {
-    const alerts: { school: string; alert: StaffingAlert }[] = []
-    optimizationResults.forEach((result) => {
-      result.alerts.forEach(alert => {
-        alerts.push({ school: result.school_name, alert })
-      })
-    })
-    return alerts
   }
 
   // Get optimized breaks for a teacher
@@ -710,79 +701,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* Staffing Alerts */}
-      {getAllAlerts().length > 0 && showAlerts && (
-        <div className="mb-6 space-y-3">
-          {getAllAlerts().map((item, idx) => (
-            <div
-              key={idx}
-              className={`flex items-center justify-between p-4 rounded-lg border ${
-                item.alert.type === 'surplus'
-                  ? 'bg-blue-50 border-blue-200'
-                  : 'bg-red-50 border-red-200'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                {item.alert.type === 'surplus' ? (
-                  <div className="p-2 bg-blue-100 rounded-full">
-                    <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                    </svg>
-                  </div>
-                ) : (
-                  <div className="p-2 bg-red-100 rounded-full">
-                    <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                  </div>
-                )}
-                <div>
-                  <p className={`font-medium ${item.alert.type === 'surplus' ? 'text-blue-900' : 'text-red-900'}`}>
-                    {item.school}: {item.alert.type === 'surplus' ? 'Teacher Surplus' : 'Teacher Shortage'}
-                  </p>
-                  <p className={`text-sm ${item.alert.type === 'surplus' ? 'text-blue-700' : 'text-red-700'}`}>
-                    {item.alert.message}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowAlerts(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Coverage Summary */}
-      {optimizationResults.size > 0 && (
-        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          {Array.from(optimizationResults.entries()).map(([schoolId, result]) => (
-            <div key={schoolId} className="bg-white rounded-lg border border-gray-200 p-4">
-              <h3 className="font-medium text-gray-900 mb-2">{getShortName(result.school_name)}</h3>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-2xl font-bold text-brand">{result.coverage_summary.total_teachers}</p>
-                  <p className="text-xs text-gray-500">Available</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-700">{result.coverage_summary.teachers_needed_peak}</p>
-                  <p className="text-xs text-gray-500">Peak Need</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-blue-600">{result.coverage_summary.teachers_needed_nap}</p>
-                  <p className="text-xs text-gray-500">Nap Time</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* ACTUAL SCENARIO - Regular schedule views */}
       {scenarioMode === 'actual' && (
         <>
@@ -790,7 +708,11 @@ export default function CalendarPage() {
           {view === 'day' && dayViewMode === 'timeline' && (
             <div className="flex flex-col gap-6">
               {getScheduleWithBreaks().map((schedule) => (
-                <SchoolTimelineCard key={schedule.school.id} schedule={schedule} />
+                <SchoolTimelineCard
+                  key={schedule.school.id}
+                  schedule={schedule}
+                  coverageSummary={optimizationResults.get(schedule.school.id)?.coverage_summary}
+                />
               ))}
             </div>
           )}
@@ -799,7 +721,12 @@ export default function CalendarPage() {
           {view === 'day' && dayViewMode === 'schedule' && (
             <div className="flex flex-col gap-6">
               {getScheduleWithBreaks().map((schedule) => (
-                <SchoolDayCard key={schedule.school.id} schedule={schedule} formatTimeRange={formatTimeRange} />
+                <SchoolDayCard
+                  key={schedule.school.id}
+                  schedule={schedule}
+                  formatTimeRange={formatTimeRange}
+                  coverageSummary={optimizationResults.get(schedule.school.id)?.coverage_summary}
+                />
               ))}
             </div>
           )}
@@ -828,7 +755,12 @@ export default function CalendarPage() {
       {scenarioMode === 'optimized' && minimalResults.size > 0 && (
         <div className="space-y-6">
           {Array.from(minimalResults.entries()).map(([schoolId, result]) => (
-            <MinimalScenarioCard key={schoolId} result={result} getShortName={getShortName} />
+            <MinimalScenarioCard
+              key={schoolId}
+              result={result}
+              getShortName={getShortName}
+              coverageSummary={optimizationResults.get(schoolId)?.coverage_summary}
+            />
           ))}
         </div>
       )}
@@ -838,9 +770,15 @@ export default function CalendarPage() {
 
 // Timeline view - clean table layout with equal-width columns for readability
 function SchoolTimelineCard({
-  schedule
+  schedule,
+  coverageSummary
 }: {
   schedule: SchoolDaySchedule
+  coverageSummary?: {
+    total_teachers: number
+    teachers_needed_peak: number
+    teachers_needed_nap: number
+  }
 }) {
   const getShortName = (name: string) => {
     if (name === 'Peter Pan Mariner Square') return 'Mariner Square'
@@ -870,11 +808,39 @@ function SchoolTimelineCard({
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden print:rounded-none print:border-black">
-      {/* School Header */}
+      {/* School Header with Coverage Summary */}
       <div className="bg-green-100 px-4 py-3 border-b border-green-200 print:bg-green-50">
-        <h2 className="text-lg font-bold text-gray-900 text-center">
-          {getShortName(schedule.school.name)}
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">
+            {getShortName(schedule.school.name)}
+          </h2>
+          {coverageSummary && (
+            <div className="flex items-center gap-6 text-sm">
+              <div className="text-center">
+                <span className="text-xl font-bold text-brand">{coverageSummary.total_teachers}</span>
+                <span className="text-gray-600 ml-1">Available</span>
+              </div>
+              <div className="text-center" title="Teachers needed based on student-to-teacher ratios at 10am">
+                <span className="text-xl font-bold text-gray-700">{coverageSummary.teachers_needed_peak}</span>
+                <span className="text-gray-600 ml-1">Peak Need</span>
+              </div>
+              <div className="text-center" title="Teachers needed during nap time (relaxed ratios)">
+                <span className="text-xl font-bold text-blue-600">{coverageSummary.teachers_needed_nap}</span>
+                <span className="text-gray-600 ml-1">Nap Time</span>
+              </div>
+              {coverageSummary.total_teachers > coverageSummary.teachers_needed_peak && (
+                <div className="bg-green-200 text-green-800 px-2 py-1 rounded text-xs font-medium">
+                  +{coverageSummary.total_teachers - coverageSummary.teachers_needed_peak} buffer
+                </div>
+              )}
+              {coverageSummary.total_teachers < coverageSummary.teachers_needed_peak && (
+                <div className="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-medium">
+                  -{coverageSummary.teachers_needed_peak - coverageSummary.total_teachers} short
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Schedule Table */}
@@ -967,10 +933,16 @@ function SchoolTimelineCard({
 // Schedule view - compact card layout for quick overview
 function SchoolDayCard({
   schedule,
-  formatTimeRange
+  formatTimeRange,
+  coverageSummary
 }: {
   schedule: SchoolDaySchedule
   formatTimeRange: (start: string, end: string) => string
+  coverageSummary?: {
+    total_teachers: number
+    teachers_needed_peak: number
+    teachers_needed_nap: number
+  }
 }) {
   const getShortName = (name: string) => {
     if (name === 'Peter Pan Mariner Square') return 'Mariner Square'
@@ -981,11 +953,39 @@ function SchoolDayCard({
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      {/* School Header */}
+      {/* School Header with Coverage Summary */}
       <div className="bg-green-100 px-4 py-3 border-b border-green-200">
-        <h2 className="text-lg font-bold text-gray-900 text-center">
-          {getShortName(schedule.school.name)}
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">
+            {getShortName(schedule.school.name)}
+          </h2>
+          {coverageSummary && (
+            <div className="flex items-center gap-6 text-sm">
+              <div className="text-center">
+                <span className="text-xl font-bold text-brand">{coverageSummary.total_teachers}</span>
+                <span className="text-gray-600 ml-1">Available</span>
+              </div>
+              <div className="text-center" title="Teachers needed based on student-to-teacher ratios at 10am">
+                <span className="text-xl font-bold text-gray-700">{coverageSummary.teachers_needed_peak}</span>
+                <span className="text-gray-600 ml-1">Peak Need</span>
+              </div>
+              <div className="text-center" title="Teachers needed during nap time (relaxed ratios)">
+                <span className="text-xl font-bold text-blue-600">{coverageSummary.teachers_needed_nap}</span>
+                <span className="text-gray-600 ml-1">Nap Time</span>
+              </div>
+              {coverageSummary.total_teachers > coverageSummary.teachers_needed_peak && (
+                <div className="bg-green-200 text-green-800 px-2 py-1 rounded text-xs font-medium">
+                  +{coverageSummary.total_teachers - coverageSummary.teachers_needed_peak} buffer
+                </div>
+              )}
+              {coverageSummary.total_teachers < coverageSummary.teachers_needed_peak && (
+                <div className="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-medium">
+                  -{coverageSummary.teachers_needed_peak - coverageSummary.total_teachers} short
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Staff Cards */}
@@ -1046,10 +1046,16 @@ function SchoolDayCard({
 // Minimal Scenario Card - Shows hypothetical minimal staff schedule
 function MinimalScenarioCard({
   result,
-  getShortName
+  getShortName,
+  coverageSummary
 }: {
   result: MinimalOptimizationResult
   getShortName: (name: string) => string
+  coverageSummary?: {
+    total_teachers: number
+    teachers_needed_peak: number
+    teachers_needed_nap: number
+  }
 }) {
   const formatTimeDisplay = (time: string): string => {
     const [hours, minutes] = time.split(':')
@@ -1062,23 +1068,29 @@ function MinimalScenarioCard({
 
   return (
     <div className="bg-white rounded-xl border-2 border-orange-300 overflow-hidden">
-      {/* School Header with savings summary */}
+      {/* School Header with coverage comparison */}
       <div className="bg-orange-100 px-4 py-3 border-b border-orange-200">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <h2 className="text-lg font-bold text-gray-900">
-            {getShortName(result.school_name)} - Minimal Staff Scenario
+            {getShortName(result.school_name)}
           </h2>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
+            {/* Current Staff */}
             <div className="text-center">
-              <span className="text-2xl font-bold text-gray-600">{result.current_teachers}</span>
-              <span className="text-xs text-gray-500 block">Current</span>
+              <span className="text-2xl font-bold text-brand">{result.current_teachers}</span>
+              <span className="text-xs text-gray-600 block">Available</span>
             </div>
-            <svg className="w-6 h-6 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-            <div className="text-center">
+            {/* Peak Need from ratios */}
+            {coverageSummary && (
+              <div className="text-center" title="Teachers needed based purely on student-to-teacher ratios">
+                <span className="text-2xl font-bold text-gray-500">{coverageSummary.teachers_needed_peak}</span>
+                <span className="text-xs text-gray-600 block">Peak Need</span>
+              </div>
+            )}
+            {/* Minimal considering qualifications */}
+            <div className="text-center" title="Minimum achievable considering teacher qualifications">
               <span className="text-2xl font-bold text-orange-600">{result.minimal_teachers_needed}</span>
-              <span className="text-xs text-gray-500 block">Minimal</span>
+              <span className="text-xs text-gray-600 block">Minimal</span>
             </div>
             {result.potential_savings > 0 && (
               <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold">
@@ -1086,6 +1098,11 @@ function MinimalScenarioCard({
               </div>
             )}
           </div>
+        </div>
+        {/* Explanation */}
+        <div className="mt-2 text-xs text-gray-600">
+          <span className="font-medium">Peak Need</span> = teachers required by ratios alone.{' '}
+          <span className="font-medium">Minimal</span> = achievable minimum considering qualifications (e.g., infant-certified teachers).
         </div>
       </div>
 

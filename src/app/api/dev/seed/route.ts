@@ -54,9 +54,11 @@ export async function POST(request: Request) {
       attendance: 0,
       shifts: 0,
       pto: 0,
+      dates_generated: [] as string[],
     }
 
     const today = new Date()
+    console.log(`[Seed] Running seed on: ${today.toISOString().split('T')[0]} (${today.toDateString()})`)
 
     // Generate student attendance (skip if type=teachers)
     if (dataType !== 'teachers') {
@@ -71,6 +73,11 @@ export async function POST(request: Request) {
       if (dayOfWeek === 0 || dayOfWeek === 6) continue
 
       const dateStr = date.toISOString().split('T')[0]
+
+      // Track which dates are being generated
+      if (!results.dates_generated.includes(dateStr)) {
+        results.dates_generated.push(dateStr)
+      }
 
       // Random attendance rate for this day: 90-95%
       const dailyAttendanceRate = 0.90 + (Math.random() * 0.05)
@@ -127,6 +134,11 @@ export async function POST(request: Request) {
 
       const dateStr = date.toISOString().split('T')[0]
       const todayStr = today.toISOString().split('T')[0]
+
+      // Track which dates are being generated
+      if (!results.dates_generated.includes(dateStr)) {
+        results.dates_generated.push(dateStr)
+      }
 
       // Random attendance rate for this day: 90-95% of teachers present
       const dailyAttendanceRate = 0.90 + (Math.random() * 0.05)
@@ -213,10 +225,20 @@ export async function POST(request: Request) {
       .eq('status', 'active')
     } // end if dataType !== 'students'
 
+    // Sort dates for clarity
+    results.dates_generated.sort()
+
     return NextResponse.json({
       success: true,
       message: 'Test data generated',
       results,
+      summary: {
+        dates_covered: `${results.dates_generated[0]} to ${results.dates_generated[results.dates_generated.length - 1]}`,
+        total_weekdays: results.dates_generated.length,
+        attendance_records: results.attendance,
+        shift_records: results.shifts,
+        pto_requests: results.pto,
+      }
     })
   } catch (error) {
     console.error('Seed error:', error)
