@@ -105,23 +105,43 @@ export async function POST() {
       }
     }
 
-    // Generate shifts for current week
-    const startOfWeek = new Date(today)
-    startOfWeek.setDate(today.getDate() - today.getDay() + 1) // Monday
+    // Generate shifts for past 14 days (weekdays only) with 90-95% attendance
+    // Same pattern as student attendance
+    for (let i = 14; i >= 0; i--) {
+      const date = new Date(today)
+      date.setDate(date.getDate() - i)
 
-    for (let i = 0; i < 5; i++) { // Mon-Fri
-      const date = new Date(startOfWeek)
-      date.setDate(startOfWeek.getDate() + i)
+      // Skip weekends
+      const dayOfWeek = date.getDay()
+      if (dayOfWeek === 0 || dayOfWeek === 6) continue
+
       const dateStr = date.toISOString().split('T')[0]
+      const todayStr = today.toISOString().split('T')[0]
+
+      // Random attendance rate for this day: 90-95% of teachers present
+      const dailyAttendanceRate = 0.90 + (Math.random() * 0.05)
 
       for (const teacher of teachers) {
         // Get a random classroom from their school
         const schoolClassrooms = classrooms.filter((c: { school_id: string }) => c.school_id === teacher.school_id)
         const classroom = schoolClassrooms[Math.floor(Math.random() * schoolClassrooms.length)]
 
-        let status = 'scheduled'
-        if (date < today) status = 'completed'
-        else if (dateStr === today.toISOString().split('T')[0]) status = 'in_progress'
+        const rand = Math.random()
+        let status: string
+
+        if (rand < dailyAttendanceRate) {
+          // Teacher present - completed or scheduled
+          if (dateStr < todayStr) {
+            status = 'completed'
+          } else if (dateStr === todayStr) {
+            status = 'in_progress'
+          } else {
+            status = 'scheduled'
+          }
+        } else {
+          // Teacher absent - cancelled shift
+          status = 'cancelled'
+        }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error } = await (supabase as any)
