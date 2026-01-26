@@ -55,70 +55,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const supabase = supabaseRef.current
     let isMounted = true
+    let initialCheckDone = false
 
-    // Get initial session with timeout protection
-    const initAuth = async () => {
-      console.log('[Auth] Starting initialization...')
+    console.log('[Auth] Setting up auth listener...')
 
-      try {
-        // Add 5-second timeout to prevent hanging
-        const { data: { session } } = await withTimeout(
-          supabase.auth.getSession(),
-          5000,
-          'Session check timed out'
-        )
-
-        console.log('[Auth] Session check complete:', session ? 'has session' : 'no session')
-
-        if (session?.user && isMounted) {
-          setUser(session.user)
-          console.log('[Auth] Fetching user role and schools...')
-          // Wait for schools to load before marking as done
-          await withTimeout(
-            fetchUserRoleAndSchools(session.user.id),
-            5000,
-            'Fetching schools timed out'
-          )
-          console.log('[Auth] Initialization complete')
-          if (isMounted) setLoading(false)
-        } else {
-          // No session - done loading
-          console.log('[Auth] No session, done loading')
-          if (isMounted) setLoading(false)
-        }
-      } catch (error) {
-        // Handle timeout or other errors
-        if (error instanceof Error) {
-          if (error.name === 'AbortError') {
-            console.log('[Auth] Init aborted (this is usually fine)')
-            if (isMounted) setLoading(false)
-          } else if (error.message.includes('timed out')) {
-            console.warn('[Auth] Session check timed out - clearing session and redirecting to login')
-            // Clear any corrupted session state and redirect to login
-            try {
-              await supabase.auth.signOut()
-            } catch (e) {
-              console.error('[Auth] Error signing out:', e)
-            }
-            // Force redirect to login to get a fresh session
-            window.location.href = '/login'
-            return // Don't set loading false, we're redirecting
-          } else {
-            console.error('[Auth] Error initializing:', error.message)
-            if (isMounted) setLoading(false)
-          }
-        } else {
-          if (isMounted) setLoading(false)
-        }
-      }
-    }
-
-    initAuth()
-
-    // Listen for auth changes
+    // Listen for auth changes - this is the PRIMARY way we get the session
+    // onAuthStateChange fires immediately with current session (INITIAL_SESSION event)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('[Auth] Auth state changed:', event)
+        console.log('[Auth] Auth state changed:', event, session ? 'has session' : 'no session')
         if (!isMounted) return
 
         if (event === 'SIGNED_OUT') {
@@ -132,14 +77,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (session?.user) {
           setUser(session.user)
-          await fetchUserRoleAndSchools(session.user.id)
+          console.log('[Auth] Fetching user role and schools...')
+          try {
+            await fetchUserRoleAndSchools(session.user.id)
+            console.log('[Auth] Initialization complete')
+          } catch (e) {
+            console.error('[Auth] Error fetching schools:', e)
+          }
         }
-        setLoading(false)
+
+        initialCheckDone = true
+        if (isMounted) setLoading(false)
       }
     )
 
+    // Fallback: if onAuthStateChange doesn't fire within 3 seconds, stop loading
+    const fallbackTimer = setTimeout(() => {
+      if (!initialCheckDone && isMounted) {
+        console.warn('[Auth] Auth listener timeout - stopping loading state')
+        setLoading(false)
+      }
+    }, 3000)
+
     return () => {
       isMounted = false
+      clearTimeout(fallbackTimer)
       subscription.unsubscribe()
     }
   }, [])
