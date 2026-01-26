@@ -91,14 +91,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error instanceof Error) {
           if (error.name === 'AbortError') {
             console.log('[Auth] Init aborted (this is usually fine)')
+            if (isMounted) setLoading(false)
           } else if (error.message.includes('timed out')) {
-            console.warn('[Auth] Session check timed out - treating as no session')
+            console.warn('[Auth] Session check timed out - clearing session and redirecting to login')
+            // Clear any corrupted session state and redirect to login
+            try {
+              await supabase.auth.signOut()
+            } catch (e) {
+              console.error('[Auth] Error signing out:', e)
+            }
+            // Force redirect to login to get a fresh session
+            window.location.href = '/login'
+            return // Don't set loading false, we're redirecting
           } else {
             console.error('[Auth] Error initializing:', error.message)
+            if (isMounted) setLoading(false)
           }
+        } else {
+          if (isMounted) setLoading(false)
         }
-        // On any error, stop loading to prevent infinite hang
-        if (isMounted) setLoading(false)
       }
     }
 
