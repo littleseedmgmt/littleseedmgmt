@@ -163,13 +163,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signOut = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
+    console.log('[Auth] Sign out initiated')
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error('[Auth] Sign out error:', error)
+      } else {
+        console.log('[Auth] Sign out successful')
+      }
+    } catch (e) {
+      console.error('[Auth] Sign out exception:', e)
+    }
+    // Always clear state and redirect, even if signOut fails
     setUser(null)
     setUserRole(null)
     setSchools([])
     setCurrentSchool(null)
-    // Redirect to login page
+    console.log('[Auth] Redirecting to login...')
     window.location.href = '/login'
   }
 
