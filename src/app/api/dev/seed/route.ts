@@ -5,10 +5,14 @@ import { NextResponse } from 'next/server'
 const isAllowed = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_ENV_MODE === 'test'
 
 // POST /api/dev/seed - Generate test data
-export async function POST() {
+// Query params: ?type=teachers (only teachers), ?type=students (only students), default=both
+export async function POST(request: Request) {
   if (!isAllowed) {
     return NextResponse.json({ error: 'Only available in development or test mode' }, { status: 403 })
   }
+
+  const url = new URL(request.url)
+  const dataType = url.searchParams.get('type') // 'teachers', 'students', or null (both)
 
   try {
     const supabase = await createClient()
@@ -52,9 +56,12 @@ export async function POST() {
       pto: 0,
     }
 
+    const today = new Date()
+
+    // Generate student attendance (skip if type=teachers)
+    if (dataType !== 'teachers') {
     // Generate attendance for past 14 days (weekdays only)
     // Each day has 90-95% attendance rate
-    const today = new Date()
     for (let i = 14; i >= 0; i--) {
       const date = new Date(today)
       date.setDate(date.getDate() - i)
@@ -104,7 +111,10 @@ export async function POST() {
         if (!error) results.attendance++
       }
     }
+    } // end if dataType !== 'teachers'
 
+    // Generate teacher shifts (skip if type=students)
+    if (dataType !== 'students') {
     // Generate shifts for past 14 days (weekdays only) with 90-95% attendance
     // Same pattern as student attendance
     for (let i = 14; i >= 0; i--) {
@@ -201,6 +211,7 @@ export async function POST() {
         pto_balance_personal: 16,
       })
       .eq('status', 'active')
+    } // end if dataType !== 'students'
 
     return NextResponse.json({
       success: true,
