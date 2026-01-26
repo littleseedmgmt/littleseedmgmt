@@ -360,8 +360,11 @@ export default function CalendarPage() {
     })
   }
 
+  // Memoize schools length to prevent infinite loops when schools array reference changes
+  const schoolsLength = schools.length
+
   useEffect(() => {
-    console.log('[Calendar] useEffect triggered:', { authLoading, schoolsCount: schools.length, currentSchool: currentSchool?.name })
+    console.log('[Calendar] useEffect triggered:', { authLoading, schoolsCount: schoolsLength, currentSchool: currentSchool?.name })
 
     // Don't fetch until auth is ready
     if (authLoading) {
@@ -369,18 +372,18 @@ export default function CalendarPage() {
       return
     }
 
+    // If no schools available, show empty state once (don't keep re-running)
+    if (schoolsLength === 0 && !currentSchool) {
+      console.log('[Calendar] No schools available, showing empty state')
+      setSchedules([])
+      setLoading(false)
+      markDataReady()
+      return
+    }
+
     const fetchSchedules = async () => {
       const schoolsToFetch = currentSchool ? [currentSchool] : schools
       console.log('[Calendar] fetchSchedules called, schoolsToFetch:', schoolsToFetch.length)
-
-      // If no schools available yet, stop loading
-      if (!schoolsToFetch || schoolsToFetch.length === 0) {
-        console.log('[Calendar] No schools available, showing empty state')
-        setSchedules([])
-        setLoading(false)
-        markDataReady()
-        return
-      }
 
       setLoading(true)
 
@@ -531,7 +534,7 @@ export default function CalendarPage() {
 
     fetchSchedules()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDate, currentSchool, schools, authLoading])
+  }, [currentDate, currentSchool, schoolsLength, authLoading])
 
   const dayOfWeek = DAYS_OF_WEEK[currentDate.getDay()]
   const dateDisplay = `${MONTHS[currentDate.getMonth()]} ${currentDate.getDate()}, ${currentDate.getFullYear()}`
