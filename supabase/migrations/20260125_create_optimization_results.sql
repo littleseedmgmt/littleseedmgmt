@@ -19,38 +19,19 @@ CREATE INDEX IF NOT EXISTS idx_optimization_results_school_date
 -- Enable RLS
 ALTER TABLE optimization_results ENABLE ROW LEVEL SECURITY;
 
--- Policy: Users can read optimization results for schools they have access to
-CREATE POLICY "Users can read optimization results"
-  ON optimization_results
-  FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM user_schools
-      WHERE user_schools.school_id = optimization_results.school_id
-      AND user_schools.user_id = auth.uid()
-    )
-    OR
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.role = 'owner'
-    )
-  );
+-- RLS policies using get_user_schools function (consistent with other tables)
+CREATE POLICY optimization_results_select
+  ON optimization_results FOR SELECT
+  USING (school_id IN (SELECT get_user_schools(auth.uid())));
 
--- Policy: Users can insert/update optimization results for schools they have access to
-CREATE POLICY "Users can write optimization results"
-  ON optimization_results
-  FOR ALL
-  USING (
-    EXISTS (
-      SELECT 1 FROM user_schools
-      WHERE user_schools.school_id = optimization_results.school_id
-      AND user_schools.user_id = auth.uid()
-    )
-    OR
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.role = 'owner'
-    )
-  );
+CREATE POLICY optimization_results_insert
+  ON optimization_results FOR INSERT
+  WITH CHECK (school_id IN (SELECT get_user_schools(auth.uid())));
+
+CREATE POLICY optimization_results_update
+  ON optimization_results FOR UPDATE
+  USING (school_id IN (SELECT get_user_schools(auth.uid())));
+
+CREATE POLICY optimization_results_delete
+  ON optimization_results FOR DELETE
+  USING (school_id IN (SELECT get_user_schools(auth.uid())));
