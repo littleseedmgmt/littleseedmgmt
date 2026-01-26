@@ -1,9 +1,17 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react'
 import { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { School } from '@/types/database'
+
+// Timeout wrapper to prevent hanging promises
+function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Promise<T> {
+  const timeout = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(errorMsg)), ms)
+  })
+  return Promise.race([promise, timeout])
+}
 
 type UserRoleType = 'super_admin' | 'school_admin' | 'teacher' | 'staff'
 
@@ -33,33 +41,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentSchool, setCurrentSchool] = useState<School | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Use ref to ensure single supabase client instance across renders
+  const supabaseRef = useRef(createClient())
+  const initCalledRef = useRef(false)
+
   useEffect(() => {
-    const supabase = createClient()
+    // Prevent double initialization
+    if (initCalledRef.current) {
+      console.log('[Auth] Init already called, skipping')
+      return
+    }
+    initCalledRef.current = true
+
+    const supabase = supabaseRef.current
     let isMounted = true
 
-    // Get initial session
+    // Get initial session with timeout protection
     const initAuth = async () => {
+      console.log('[Auth] Starting initialization...')
+
       try {
-        // Use getSession first, then getUser for validation
-        const { data: { session } } = await supabase.auth.getSession()
+        // Add 5-second timeout to prevent hanging
+        const { data: { session } } = await withTimeout(
+          supabase.auth.getSession(),
+          5000,
+          'Session check timed out'
+        )
+
+        console.log('[Auth] Session check complete:', session ? 'has session' : 'no session')
 
         if (session?.user && isMounted) {
           setUser(session.user)
+          console.log('[Auth] Fetching user role and schools...')
           // Wait for schools to load before marking as done
-          await fetchUserRoleAndSchools(session.user.id)
+          await withTimeout(
+            fetchUserRoleAndSchools(session.user.id),
+            5000,
+            'Fetching schools timed out'
+          )
+          console.log('[Auth] Initialization complete')
           if (isMounted) setLoading(false)
         } else {
           // No session - done loading
+          console.log('[Auth] No session, done loading')
           if (isMounted) setLoading(false)
         }
       } catch (error) {
-        // Ignore AbortError - it's usually from React strict mode or navigation
-        if (error instanceof Error && error.name === 'AbortError') {
-          console.log('Auth init aborted (this is usually fine)')
-        } else {
-          console.error('Error initializing auth:', error)
+        // Handle timeout or other errors
+        if (error instanceof Error) {
+          if (error.name === 'AbortError') {
+            console.log('[Auth] Init aborted (this is usually fine)')
+          } else if (error.message.includes('timed out')) {
+            console.warn('[Auth] Session check timed out - treating as no session')
+          } else {
+            console.error('[Auth] Error initializing:', error.message)
+          }
         }
-        // Even on error, stop loading
+        // On any error, stop loading to prevent infinite hang
         if (isMounted) setLoading(false)
       }
     }
@@ -69,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('[Auth] Auth state changed:', event)
         if (!isMounted) return
 
         if (event === 'SIGNED_OUT') {
@@ -95,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const fetchUserRoleAndSchools = async (userId: string) => {
-    const supabase = createClient()
+    const supabase = supabaseRef.current
 
     try {
       // Fetch user roles
@@ -140,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signOut = async () => {
-    const supabase = createClient()
+    const supabase = supabaseRef.current
     await supabase.auth.signOut()
     setUser(null)
     setUserRole(null)
