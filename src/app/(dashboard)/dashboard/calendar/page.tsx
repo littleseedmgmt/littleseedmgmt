@@ -363,6 +363,9 @@ export default function CalendarPage() {
   // Memoize schools length to prevent infinite loops when schools array reference changes
   const schoolsLength = schools.length
 
+  // Fallback: fetch schools directly if auth context doesn't have them
+  const [fallbackSchools, setFallbackSchools] = useState<School[]>([])
+
   useEffect(() => {
     console.log('[Calendar] useEffect triggered:', { authLoading, schoolsCount: schoolsLength, currentSchool: currentSchool?.name })
 
@@ -372,17 +375,34 @@ export default function CalendarPage() {
       return
     }
 
-    // If no schools available, show empty state once (don't keep re-running)
-    if (schoolsLength === 0 && !currentSchool) {
-      console.log('[Calendar] No schools available, showing empty state')
-      setSchedules([])
-      setLoading(false)
-      markDataReady()
+    // If no schools from auth context, try fetching directly from API
+    if (schoolsLength === 0 && !currentSchool && fallbackSchools.length === 0) {
+      console.log('[Calendar] No schools from auth, fetching from API...')
+      fetch('/api/schools')
+        .then(res => res.ok ? res.json() : [])
+        .then(data => {
+          console.log('[Calendar] Fallback schools fetched:', data.length)
+          if (Array.isArray(data) && data.length > 0) {
+            setFallbackSchools(data)
+          } else {
+            // Truly no schools available
+            setSchedules([])
+            setLoading(false)
+            markDataReady()
+          }
+        })
+        .catch(() => {
+          setSchedules([])
+          setLoading(false)
+          markDataReady()
+        })
       return
     }
 
     const fetchSchedules = async () => {
-      const schoolsToFetch = currentSchool ? [currentSchool] : schools
+      // Use fallback schools if auth context is empty
+      const effectiveSchools = schoolsLength > 0 ? schools : fallbackSchools
+      const schoolsToFetch = currentSchool ? [currentSchool] : effectiveSchools
       console.log('[Calendar] fetchSchedules called, schoolsToFetch:', schoolsToFetch.length)
 
       setLoading(true)
@@ -534,7 +554,8 @@ export default function CalendarPage() {
 
     fetchSchedules()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentDate, currentSchool, schoolsLength, authLoading])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDate, currentSchool, schoolsLength, authLoading, fallbackSchools.length])
 
   const dayOfWeek = DAYS_OF_WEEK[currentDate.getDay()]
   const dateDisplay = `${MONTHS[currentDate.getMonth()]} ${currentDate.getDate()}, ${currentDate.getFullYear()}`
