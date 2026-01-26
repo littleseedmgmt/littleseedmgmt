@@ -289,6 +289,10 @@ export async function POST(request: NextRequest) {
     // Track which slots are used to stagger breaks
     const usedSlots = new Map<number, string[]>() // slot start time -> teacher ids
 
+    // Track substitute assignments to prevent double-booking
+    // Maps substitute ID -> array of { start, end } time ranges they're covering
+    const substituteAssignments = new Map<string, { start: number; end: number }[]>()
+
     // Helper: Check if a teacher is working at a given time
     const isTeacherWorking = (teacher: Teacher, timeMinutes: number): boolean => {
       if (!teacher.regular_shift_start || !teacher.regular_shift_end) return false
@@ -308,11 +312,35 @@ export async function POST(request: NextRequest) {
       return false
     }
 
+    // Helper: Check if a substitute is already assigned during a time range
+    const isSubstituteAssigned = (subId: string, startTime: number, endTime: number): boolean => {
+      const assignments = substituteAssignments.get(subId)
+      if (!assignments) return false
+
+      // Check if any existing assignment overlaps with the requested time range
+      for (const assignment of assignments) {
+        // Overlap exists if: start1 < end2 AND start2 < end1
+        if (startTime < assignment.end && assignment.start < endTime) {
+          return true
+        }
+      }
+      return false
+    }
+
+    // Helper: Record a substitute assignment
+    const recordSubstituteAssignment = (subId: string, startTime: number, endTime: number) => {
+      const existing = substituteAssignments.get(subId) || []
+      existing.push({ start: startTime, end: endTime })
+      substituteAssignments.set(subId, existing)
+    }
+
     // Helper: Find a substitute teacher for a given break time
     // includingDirectors: set to true for lunch breaks where directors can help
+    // breakDuration: duration in minutes (10 for short breaks, 60 for lunch)
     const findSubstitute = (
       teacherOnBreak: Teacher,
       breakTime: number,
+      breakDuration: number,
       classrooms: Classroom[],
       includingDirectors: boolean = false
     ): string | null => {
@@ -323,11 +351,16 @@ export async function POST(request: NextRequest) {
       // Use all potential subs (including directors) or just working teachers
       const candidates = includingDirectors ? allPotentialSubs : workingTeachers
 
+      const breakEndTime = breakTime + breakDuration
+
       // Find available teachers who can cover
       for (const sub of candidates) {
         if (sub.id === teacherOnBreak.id) continue // Can't substitute yourself
         if (!isTeacherWorking(sub, breakTime)) continue // Not working at this time
-        if (isTeacherOnBreak(sub.id, breakTime)) continue // Already on break
+        if (isTeacherOnBreak(sub.id, breakTime)) continue // Already on their own break
+
+        // Check if already assigned to cover someone else during this time
+        if (isSubstituteAssigned(sub.id, breakTime, breakEndTime)) continue
 
         // Check lunch time (directors typically don't have set lunch times, so skip if not set)
         if (sub.lunch_break_start) {
@@ -338,6 +371,9 @@ export async function POST(request: NextRequest) {
 
         // Check infant qualification if needed
         if (isInfantRoom && !isInfantQualified(sub)) continue
+
+        // Found a valid substitute - record the assignment
+        recordSubstituteAssignment(sub.id, breakTime, breakEndTime)
 
         return `${sub.first_name} helps`
       }
@@ -417,15 +453,17 @@ export async function POST(request: NextRequest) {
       const assignment = breakAssignments.get(teacher.id)
       if (!assignment) continue
 
-      const break1Sub = findSubstitute(teacher, assignment.break1, classrooms, false)
-      const break2Sub = findSubstitute(teacher, assignment.break2, classrooms, false)
+      const break1Sub = findSubstitute(teacher, assignment.break1, 10, classrooms, false)
+      const break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, false)
 
       // Calculate lunch substitute if teacher has lunch break
       // Include directors as potential substitutes for lunch coverage
       let lunchSub: string | null = null
-      if (teacher.lunch_break_start) {
+      if (teacher.lunch_break_start && teacher.lunch_break_end) {
         const lunchStart = timeToMinutes(teacher.lunch_break_start)
-        lunchSub = findSubstitute(teacher, lunchStart, classrooms, true)
+        const lunchEnd = timeToMinutes(teacher.lunch_break_end)
+        const lunchDuration = lunchEnd - lunchStart
+        lunchSub = findSubstitute(teacher, lunchStart, lunchDuration, classrooms, true)
       }
 
       optimizedBreaks.push({
