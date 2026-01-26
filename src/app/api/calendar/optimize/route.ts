@@ -492,6 +492,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Save optimization result to database for future retrieval
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: saveError } = await (supabase as any)
+      .from('optimization_results')
+      .upsert({
+        school_id,
+        date,
+        result_type: 'regular',
+        result_data: result,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'school_id,date,result_type' })
+
+    if (saveError) {
+      console.error('[Optimize] Error saving result:', saveError.message)
+      // Don't fail the request - just log the error
+    }
+
     return NextResponse.json(result)
   } catch (error) {
     console.error('Error in POST /api/calendar/optimize:', error)

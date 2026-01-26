@@ -244,13 +244,38 @@ export default function CalendarPage() {
     const newDate = new Date(currentDate)
     newDate.setDate(newDate.getDate() + direction)
     setCurrentDate(newDate)
-    // Clear optimization results when changing dates - they're date-specific
-    setOptimizationResults(new Map())
-    setMinimalResults(new Map())
+    // Results will be loaded by useEffect when currentDate changes
   }
 
   const goToToday = () => {
     setCurrentDate(new Date())
+    // Results will be loaded by useEffect when currentDate changes
+  }
+
+  // Load saved optimization results from database
+  const loadSavedOptimization = async (schoolsToLoad: { id: string }[], dateStr: string) => {
+    const results = new Map<string, OptimizationResult>()
+    const minResults = new Map<string, MinimalOptimizationResult>()
+
+    await Promise.all(schoolsToLoad.map(async (school) => {
+      try {
+        const res = await fetch(`/api/calendar/optimization-results?school_id=${school.id}&date=${dateStr}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.regular) {
+            results.set(school.id, data.regular)
+          }
+          if (data.minimal) {
+            minResults.set(school.id, data.minimal)
+          }
+        }
+      } catch (err) {
+        console.error(`Error loading saved optimization for school ${school.id}:`, err)
+      }
+    }))
+
+    setOptimizationResults(results)
+    setMinimalResults(minResults)
   }
 
   // Run optimization for all schools (both regular and minimal)
@@ -533,6 +558,11 @@ export default function CalendarPage() {
         const results = await Promise.all(schedulePromises)
         console.log('[Calendar] Schedules fetched:', results.map(r => ({ school: r.school.name, staffCount: r.staff.length })))
         setSchedules(results)
+
+        // Load saved optimization results for this date
+        console.log('[Calendar] Loading saved optimization results...')
+        await loadSavedOptimization(schoolsToFetch, dateStr)
+        console.log('[Calendar] Optimization results loaded')
       } catch (error) {
         console.error('[Calendar] Error fetching schedules:', error)
         setSchedules([])
