@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useComponentPerf } from '@/contexts/PerfContext'
 import { perfFetch } from '@/lib/perf'
 import { School } from '@/types/database'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 interface Teacher {
   id: string
@@ -51,7 +51,8 @@ function buildTimeSegments(
   break2End: string | null,
   classroomName: string | null,
   break1SubName?: string | null,
-  break2SubName?: string | null
+  break2SubName?: string | null,
+  lunchSubName?: string | null
 ): TimeBlock[] {
   const segments: TimeBlock[] = []
 
@@ -62,7 +63,7 @@ function buildTimeSegments(
     breaks.push({ start: break1Start, end: break1End, type: 'break', subName: break1SubName })
   }
   if (lunchStart && lunchEnd) {
-    breaks.push({ start: lunchStart, end: lunchEnd, type: 'lunch', subName: null })
+    breaks.push({ start: lunchStart, end: lunchEnd, type: 'lunch', subName: lunchSubName })
   }
   if (break2Start && break2End) {
     breaks.push({ start: break2Start, end: break2End, type: 'break', subName: break2SubName })
@@ -148,6 +149,9 @@ interface OptimizedBreak {
   break2_start: string
   break2_end: string
   break2_sub_name: string | null
+  lunch_start: string | null
+  lunch_end: string | null
+  lunch_sub_name: string | null
 }
 
 interface StaffingAlert {
@@ -217,6 +221,56 @@ export default function CalendarPage() {
   // Minimal optimization state
   const [scenarioMode, setScenarioMode] = useState<ScenarioMode>('actual')
   const [minimalResults, setMinimalResults] = useState<Map<string, MinimalOptimizationResult>>(new Map())
+
+  // Date picker state
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [pickerMonth, setPickerMonth] = useState(new Date())
+  const datePickerRef = useRef<HTMLDivElement>(null)
+
+  // Close date picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
+        setShowDatePicker(false)
+      }
+    }
+    if (showDatePicker) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showDatePicker])
+
+  // Sync picker month when date picker opens
+  const openDatePicker = () => {
+    setPickerMonth(new Date(currentDate))
+    setShowDatePicker(true)
+  }
+
+  const selectDate = (date: Date) => {
+    setCurrentDate(date)
+    setShowDatePicker(false)
+  }
+
+  // Generate calendar days for the picker
+  const getCalendarDays = () => {
+    const year = pickerMonth.getFullYear()
+    const month = pickerMonth.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+    const days: (Date | null)[] = []
+
+    // Add empty slots for days before the first day of the month
+    for (let i = 0; i < firstDay.getDay(); i++) {
+      days.push(null)
+    }
+
+    // Add all days of the month
+    for (let d = 1; d <= lastDay.getDate(); d++) {
+      days.push(new Date(year, month, d))
+    }
+
+    return days
+  }
 
   const getShortName = (name: string) => {
     if (name === 'Peter Pan Mariner Square') return 'Mariner Square'
@@ -360,7 +414,8 @@ export default function CalendarPage() {
           optimizedBreak.break2_end,
           teacher.classroom_title,
           optimizedBreak.break1_sub_name,
-          optimizedBreak.break2_sub_name
+          optimizedBreak.break2_sub_name,
+          optimizedBreak.lunch_sub_name
         )
 
         return {
@@ -657,10 +712,93 @@ export default function CalendarPage() {
               </svg>
             </button>
 
-            <div className="px-4 py-2 min-w-[250px] text-center">
-              <span className={`font-medium ${isToday ? 'text-brand' : 'text-gray-900'}`}>
+            <div className="relative" ref={datePickerRef}>
+              <button
+                onClick={openDatePicker}
+                className={`px-4 py-2 min-w-[250px] text-center font-medium rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors ${isToday ? 'text-brand' : 'text-gray-900'}`}
+              >
                 {dayOfWeek}, {dateDisplay}
-              </span>
+                <svg className="w-4 h-4 inline-block ml-2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {/* Date Picker Dropdown */}
+              {showDatePicker && (
+                <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-white rounded-xl shadow-lg border border-gray-200 p-4 z-50 w-[300px]">
+                  {/* Month Navigation */}
+                  <div className="flex items-center justify-between mb-4">
+                    <button
+                      onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() - 1))}
+                      className="p-1 rounded hover:bg-gray-100"
+                    >
+                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <span className="font-semibold text-gray-900">
+                      {MONTHS[pickerMonth.getMonth()]} {pickerMonth.getFullYear()}
+                    </span>
+                    <button
+                      onClick={() => setPickerMonth(new Date(pickerMonth.getFullYear(), pickerMonth.getMonth() + 1))}
+                      className="p-1 rounded hover:bg-gray-100"
+                    >
+                      <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Day Headers */}
+                  <div className="grid grid-cols-7 gap-1 mb-2">
+                    {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                      <div key={day} className="text-center text-xs font-medium text-gray-500 py-1">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Calendar Days */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {getCalendarDays().map((date, idx) => (
+                      <div key={idx}>
+                        {date ? (
+                          <button
+                            onClick={() => selectDate(date)}
+                            className={`w-full aspect-square flex items-center justify-center text-sm rounded-lg transition-colors ${
+                              formatDate(date) === formatDate(currentDate)
+                                ? 'bg-brand text-white font-semibold'
+                                : formatDate(date) === formatDate(new Date())
+                                ? 'bg-brand/10 text-brand font-semibold hover:bg-brand/20'
+                                : 'hover:bg-gray-100 text-gray-900'
+                            }`}
+                          >
+                            {date.getDate()}
+                          </button>
+                        ) : (
+                          <div className="w-full aspect-square" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Quick Actions */}
+                  <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
+                    <button
+                      onClick={() => selectDate(new Date())}
+                      className="flex-1 px-3 py-2 text-sm font-medium text-brand border border-brand rounded-lg hover:bg-brand/5"
+                    >
+                      Today
+                    </button>
+                    <button
+                      onClick={() => setShowDatePicker(false)}
+                      className="flex-1 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <button

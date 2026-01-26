@@ -45,6 +45,9 @@ interface OptimizedBreak {
   break2_start: string
   break2_end: string
   break2_sub_name: string | null  // Who covers during break 2
+  lunch_start: string | null
+  lunch_end: string | null
+  lunch_sub_name: string | null   // Who covers during lunch
 }
 
 interface StaffingAlert {
@@ -213,6 +216,12 @@ export async function POST(request: NextRequest) {
       t.regular_shift_end
     )
 
+    // All potential substitutes including directors (they can help cover breaks/lunch)
+    const allPotentialSubs = teachers.filter(t =>
+      t.regular_shift_start &&
+      t.regular_shift_end
+    )
+
     const alerts: StaffingAlert[] = []
     const optimizedBreaks: OptimizedBreak[] = []
 
@@ -300,22 +309,27 @@ export async function POST(request: NextRequest) {
     }
 
     // Helper: Find a substitute teacher for a given break time
+    // includingDirectors: set to true for lunch breaks where directors can help
     const findSubstitute = (
       teacherOnBreak: Teacher,
       breakTime: number,
-      classrooms: Classroom[]
+      classrooms: Classroom[],
+      includingDirectors: boolean = false
     ): string | null => {
       // Get the classroom of the teacher on break
       const teacherClassroom = classrooms.find(c => c.name === teacherOnBreak.classroom_title)
       const isInfantRoom = teacherClassroom?.age_group === 'infant' || teacherClassroom?.age_group === 'toddler'
 
+      // Use all potential subs (including directors) or just working teachers
+      const candidates = includingDirectors ? allPotentialSubs : workingTeachers
+
       // Find available teachers who can cover
-      for (const sub of workingTeachers) {
+      for (const sub of candidates) {
         if (sub.id === teacherOnBreak.id) continue // Can't substitute yourself
         if (!isTeacherWorking(sub, breakTime)) continue // Not working at this time
         if (isTeacherOnBreak(sub.id, breakTime)) continue // Already on break
 
-        // Check lunch time
+        // Check lunch time (directors typically don't have set lunch times, so skip if not set)
         if (sub.lunch_break_start) {
           const lunchStart = timeToMinutes(sub.lunch_break_start)
           const lunchEnd = sub.lunch_break_end ? timeToMinutes(sub.lunch_break_end) : lunchStart + 60
@@ -403,8 +417,16 @@ export async function POST(request: NextRequest) {
       const assignment = breakAssignments.get(teacher.id)
       if (!assignment) continue
 
-      const break1Sub = findSubstitute(teacher, assignment.break1, classrooms)
-      const break2Sub = findSubstitute(teacher, assignment.break2, classrooms)
+      const break1Sub = findSubstitute(teacher, assignment.break1, classrooms, false)
+      const break2Sub = findSubstitute(teacher, assignment.break2, classrooms, false)
+
+      // Calculate lunch substitute if teacher has lunch break
+      // Include directors as potential substitutes for lunch coverage
+      let lunchSub: string | null = null
+      if (teacher.lunch_break_start) {
+        const lunchStart = timeToMinutes(teacher.lunch_break_start)
+        lunchSub = findSubstitute(teacher, lunchStart, classrooms, true)
+      }
 
       optimizedBreaks.push({
         teacher_id: teacher.id,
@@ -414,7 +436,10 @@ export async function POST(request: NextRequest) {
         break1_sub_name: break1Sub,
         break2_start: minutesToTime(assignment.break2),
         break2_end: minutesToTime(assignment.break2 + 10),
-        break2_sub_name: break2Sub
+        break2_sub_name: break2Sub,
+        lunch_start: teacher.lunch_break_start,
+        lunch_end: teacher.lunch_break_end,
+        lunch_sub_name: lunchSub
       })
     }
 
