@@ -310,6 +310,23 @@ export async function POST(request: NextRequest) {
         return `${sub.first_name} helps`
       }
 
+      // If no regular substitute found and we haven't already tried directors, try them as fallback
+      if (!includingDirectors) {
+        const directors = allPotentialSubs.filter(t =>
+          t.role === 'director' || t.role === 'assistant_director'
+        )
+        for (const director of directors) {
+          if (director.id === teacherOnBreak.id) continue
+          if (!isTeacherWorking(director, breakTime)) continue
+          if (doesTeacherBreakOverlap(director, breakTime, breakEndTime)) continue
+          if (isSubstituteAssigned(director.id, breakTime, breakEndTime)) continue
+          if (isInfantRoom && !isInfantQualified(director)) continue
+
+          recordSubstituteAssignment(director.id, breakTime, breakEndTime)
+          return `${director.first_name} helps`
+        }
+      }
+
       return null // No substitute found
     }
 

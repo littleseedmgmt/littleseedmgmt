@@ -1069,6 +1069,12 @@ function SchoolTimelineCard({
                         {block.substitute_name}
                       </div>
                     )}
+                    {/* No coverage warning for breaks/lunch without substitute */}
+                    {(block.type === 'break' || block.type === 'lunch') && !block.substitute_name && (
+                      <div className="text-red-500 font-semibold text-xs mt-1">
+                        No coverage
+                      </div>
+                    )}
                   </td>
                 ))}
 
@@ -1093,6 +1099,10 @@ function SchoolTimelineCard({
         <div className="flex items-center gap-2">
           <span className="text-green-700 font-semibold">Green text</span>
           <span className="text-gray-700">= Substitute covering</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-red-500 font-semibold">No coverage</span>
+          <span className="text-gray-700">= No substitute available</span>
         </div>
       </div>
 
@@ -1201,6 +1211,10 @@ function SchoolDayCard({
                   )}
                   {block.substitute_name && (
                     <div className="text-green-700 text-xs font-semibold">{block.substitute_name}</div>
+                  )}
+                  {/* No coverage warning for breaks/lunch without substitute */}
+                  {(block.type === 'break' || block.type === 'lunch') && !block.substitute_name && (
+                    <div className="text-red-500 text-xs font-semibold">No coverage</div>
                   )}
                 </div>
               ))}
@@ -1335,6 +1349,12 @@ function MinimalScenarioCard({
                           {block.sub_name}
                         </div>
                       )}
+                      {/* No coverage warning for breaks/lunch without substitute */}
+                      {(block.type === 'break' || block.type === 'lunch') && !block.sub_name && (
+                        <div className="text-red-500 font-semibold text-xs mt-1">
+                          No coverage
+                        </div>
+                      )}
                     </td>
                   ))}
                   <td className="bg-gray-50"></td>
@@ -1369,7 +1389,7 @@ function MinimalScenarioCard({
       </div>
 
       {/* Legend */}
-      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex gap-6 text-xs">
+      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex flex-wrap gap-6 text-xs">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-green-50 border border-green-300 rounded"></div>
           <span className="text-gray-700 font-medium">Essential Staff</span>
@@ -1385,6 +1405,10 @@ function MinimalScenarioCard({
         <div className="flex items-center gap-2">
           <span className="text-green-700 font-semibold">Green text</span>
           <span className="text-gray-700">= Substitute covering</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-red-500 font-semibold">No coverage</span>
+          <span className="text-gray-700">= No substitute available</span>
         </div>
       </div>
     </div>
