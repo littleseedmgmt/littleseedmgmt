@@ -57,6 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('[Auth] Auth state changed:', event, session ? 'has session' : 'no session')
+
+        // Mark as done immediately to prevent fallback timer from firing
+        initialCheckDone = true
+
         if (!isMounted) return
 
         if (event === 'SIGNED_OUT') {
@@ -79,7 +83,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        initialCheckDone = true
         if (isMounted) setLoading(false)
       }
     )
