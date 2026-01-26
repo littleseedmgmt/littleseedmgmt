@@ -44,6 +44,7 @@ const AGE_GROUP_LABELS: Record<string, string> = {
 export default function SettingsPage() {
   const { user, userRole, isOwner } = useAuth()
   const [seeding, setSeeding] = useState(false)
+  const [seedingTeachers, setSeedingTeachers] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -132,6 +133,28 @@ export default function SettingsPage() {
       setMessage({ type: 'error', text: 'Failed to seed data' })
     } finally {
       setSeeding(false)
+    }
+  }
+
+  const handleSeedTeacherData = async () => {
+    setSeedingTeachers(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/dev/seed?type=teachers', { method: 'POST' })
+      const data = await res.json()
+
+      if (res.ok) {
+        setMessage({
+          type: 'success',
+          text: `Teacher data generated: ${data.results.shifts} shifts, ${data.results.pto} PTO requests`
+        })
+      } else {
+        setMessage({ type: 'error', text: data.error || 'Failed to seed teacher data' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to seed teacher data' })
+    } finally {
+      setSeedingTeachers(false)
     }
   }
 
@@ -492,7 +515,7 @@ export default function SettingsPage() {
           <div className="flex gap-4">
             <button
               onClick={handleSeedData}
-              disabled={seeding || clearing}
+              disabled={seeding || seedingTeachers || clearing}
               className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
             >
               {seeding ? (
@@ -505,14 +528,34 @@ export default function SettingsPage() {
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
-                  Generate Test Data
+                  Generate All Test Data
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleSeedTeacherData}
+              disabled={seeding || seedingTeachers || clearing}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {seedingTeachers ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Generate Teacher Data Only
                 </>
               )}
             </button>
 
             <button
               onClick={handleClearData}
-              disabled={seeding || clearing}
+              disabled={seeding || seedingTeachers || clearing}
               className="flex items-center gap-2 px-4 py-2 bg-white text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50"
             >
               {clearing ? (
@@ -532,7 +575,8 @@ export default function SettingsPage() {
           </div>
 
           <div className="mt-4 text-xs text-amber-600">
-            <p><strong>Generate Test Data:</strong> Creates 14 days of attendance, 1 week of shifts, and PTO requests</p>
+            <p><strong>Generate All Test Data:</strong> Creates 14 days of student attendance + teacher shifts/PTO</p>
+            <p><strong>Generate Teacher Data Only:</strong> Creates only teacher shifts and PTO (use when student data exists)</p>
             <p><strong>Clear Test Data:</strong> Removes all attendance, shifts, and PTO requests (keeps schools, teachers, students)</p>
           </div>
 
@@ -549,7 +593,7 @@ export default function SettingsPage() {
             </p>
             <button
               onClick={handleResetToBaseline}
-              disabled={seeding || clearing || resetting}
+              disabled={seeding || seedingTeachers || clearing || resetting}
               className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium"
             >
               {resetting ? (

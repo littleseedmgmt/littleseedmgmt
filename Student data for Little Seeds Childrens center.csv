@@ -1,0 +1,68 @@
+﻿"Report Name","Child Summary By Program - Age Group Detail View Report"
+"Report Period","01/01/2026 - 01/31/2026"
+"Group By","Age Group"
+
+,Mon,Tue,Wed,Thu,Fri
+"Total Enrolled","41","40","41","40","40"
+"Center Capacity","44","44","44","44","44"
+"Total Space Available","3","4","3","4","4"
+
+"Age Group : Pre-School"
+
+"Capacity : 0","Ratio : 1  :  7","Enrolled : 24"
+
+S.No,CHILD,PROGRAM,PROGRAM START DATE,PROGRAM END DATE,"Mon","Tue","Wed","Thu","Fri","FTE"
+"1","Aimee Caniglia (3y 4m)","Preschool-5 Days","11/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"2","Arissa Duey (3y 7m)","Preschool-5 Days","01/01/2026","","Yes","Yes","Yes","Yes","Yes","1.00"
+"3","Beckett Casey (4y 6m)","Preschool-5 Days","01/01/2025","","Yes","Yes","Yes","Yes","Yes","2.00"
+"4","Cadence Massara (3y 11m)","Preschool-5 Days","01/02/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"5","Charlotte Basu (2y 10m)","Preschool-5 Days","01/01/2026","","Yes","Yes","Yes","Yes","Yes","1.00"
+"6","Clementine Yu (2y 9m)","Preschool-5 Days","10/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"7","Everly Apavatjrut (3y 4m)","Preschool-5 Days","09/01/2025","","Yes","Yes","Yes","Yes","Yes","2.00"
+"8","Grayson Bennett (4y 7m)","Preschool-5 Days","06/16/2023","","Yes","Yes","Yes","Yes","Yes","1.00"
+"9","Hazel Clark (3y 11m)","Preschool-5 Days","09/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"10","Kiran Thomas (4y 4m)","Preschool-5 Days","09/01/2024","","Yes","Yes","Yes","Yes","Yes","1.00"
+"11","Leo Sontag (3y 10m)","Preschool-5 Days","01/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"12","Lilian Ho (2y 7m)","Preschool-4 Days DC","10/01/2025","","Yes","Yes","Yes","No","Yes","0.80"
+"13","Marina Doty (2y 9m)","Preschool-3 Days DC","09/01/2025","","Yes","No","Yes","Yes","No","0.60"
+"14","Miya Pigue (3y 11m)","Preschool-5 Days","10/01/2024","","Yes","Yes","Yes","Yes","Yes","1.00"
+"15","Nathan Ortega (4y 2m)","Preschool-5 Days","11/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"16","Owen Yuzuriha (3y 8m)","Preschool-5 Days","12/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"17","Paige Dito (4y 1m)","Preschool-5 Days","09/01/2024","","Yes","Yes","Yes","Yes","Yes","1.00"
+"18","Palmer Cook-Herbert (3y 8m)","Preschool-5 Days","09/01/2025","","Yes","Yes","Yes","Yes","Yes","2.00"
+"19","Phoebe Binder (3y 5m)","Preschool-5 Days","12/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"20","Rex Fong-Rivadeneira (3y 1m)","Preschool-5 Days","07/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"21","Sam Toldi-Vo (3y 8m)","Preschool-5 Days","01/01/2025","","Yes","Yes","Yes","Yes","Yes","2.00"
+"22","Savannah Jackson (3y 8m)","Preschool-5 Days","12/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"23","Sofia Winterrowd (2y 6m)","Preschool-5 Days","11/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"24","Zoey Sychrava (3y 11m)","Preschool-5 Days","05/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"","",""," ","Total",24,23,24,23,23,"27.40"
+"","",""," ","Capacity",0,0,0,0,0
+"","",""," ","Space Available",-24,-23,-24,-23,-23
+
+"Age Group : Toddler"
+
+"Capacity : 0","Ratio : 1  :  6","Enrolled : 17"
+
+S.No,CHILD,PROGRAM,PROGRAM START DATE,PROGRAM END DATE,"Mon","Tue","Wed","Thu","Fri","FTE"
+"1","Adeline Stitt (2y 9m)","Toddler-5 Days","01/07/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"2","Bellamy Rocke-Holmes (18 Months)","Toddler-5 Days","08/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"3","Dawn Beckegger (17 Months)","Toddler-5 Days","08/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"4","French Jr. Clements (23 Months)","Toddler-5 Days","04/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"5","Howard Cohen-Orren (3y 1m)","Toddler-5 Days","01/07/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"6","Imogen Cheng-Wright (20 Months)","Toddler-5 Days","07/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"7","Inara Edwards (23 Months)","Toddler-5 Days","04/16/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"8","Ivy Sugay-Oda (2y 8m)","Toddler-5 Days","08/01/2025","","Yes","Yes","Yes","Yes","Yes","2.00"
+"9","Jack Barker (21 Months)","Toddler-5 Days","10/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"10","Koa Wong (2y 8m)","Toddler-5 Days","01/07/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"11","Lukas Demakas (2 Years)","Toddler-5 Days","01/14/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"12","Nejla Al-Schawaf (18 Months)","Toddler-5 Days","01/01/2026","","Yes","Yes","Yes","Yes","Yes","1.00"
+"13","Orestis Nigam (2y 8m)","Toddler-5 Days","01/07/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"14","Quinn Dito (18 Months)","Toddler-5 Days","05/01/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"15","Sajid Ben Hammed (3y 2m)","Toddler-5 Days","01/07/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"16","Sylvie Schwarz (2y 7m)","Toddler-5 Days","01/07/2025","","Yes","Yes","Yes","Yes","Yes","1.00"
+"17","Zoe Caniglia (12 Months)","Toddler-5 Days","01/01/2026","","Yes","Yes","Yes","Yes","Yes","1.00"
+"","",""," ","Total",17,17,17,17,17,"18.00"
+"","",""," ","Capacity",0,0,0,0,0
+"","",""," ","Space Available",-17,-17,-17,-17,-17
+
