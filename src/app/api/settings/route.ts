@@ -44,6 +44,33 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
+      // If table doesn't exist, return default settings
+      if (error.message?.includes('school_settings') || error.code === '42P01') {
+        console.warn('school_settings table not found, returning defaults')
+        return NextResponse.json([
+          {
+            id: 'default-ratio-normal',
+            school_id: null,
+            setting_key: 'ratio_normal',
+            setting_value: { infant: 4, toddler: 4, twos: 12, threes: 12, preschool: 12, pre_k: 12 },
+            description: 'Normal teacher-to-student ratios'
+          },
+          {
+            id: 'default-ratio-naptime',
+            school_id: null,
+            setting_key: 'ratio_naptime',
+            setting_value: { infant: 12, toddler: 12, twos: 24, threes: 24, preschool: 24, pre_k: 24 },
+            description: 'Naptime teacher-to-student ratios'
+          },
+          {
+            id: 'default-break-settings',
+            school_id: null,
+            setting_key: 'break_settings',
+            setting_value: { break_duration_minutes: 10, breaks_per_shift: 2, break1_window: 'morning', break2_window: 'afternoon' },
+            description: 'Teacher break settings'
+          }
+        ])
+      }
       console.error('Error fetching settings:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
