@@ -559,10 +559,12 @@ export default function CalendarPage() {
         console.log('[Calendar] Schedules fetched:', results.map(r => ({ school: r.school.name, staffCount: r.staff.length })))
         setSchedules(results)
 
-        // Load saved optimization results for this date
+        // Load saved optimization results for this date (non-blocking)
+        // Don't await - let it load in the background so page renders quickly
         console.log('[Calendar] Loading saved optimization results...')
-        await loadSavedOptimization(schoolsToFetch, dateStr)
-        console.log('[Calendar] Optimization results loaded')
+        loadSavedOptimization(schoolsToFetch, dateStr)
+          .then(() => console.log('[Calendar] Optimization results loaded'))
+          .catch(err => console.error('[Calendar] Error loading optimization:', err))
       } catch (error) {
         console.error('[Calendar] Error fetching schedules:', error)
         setSchedules([])
