@@ -1,17 +1,10 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react'
+// Note: useRef kept for initCalledRef
 import { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { School } from '@/types/database'
-
-// Timeout wrapper to prevent hanging promises
-function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Promise<T> {
-  const timeout = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error(errorMsg)), ms)
-  })
-  return Promise.race([promise, timeout])
-}
 
 type UserRoleType = 'super_admin' | 'school_admin' | 'teacher' | 'staff'
 
@@ -41,8 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [currentSchool, setCurrentSchool] = useState<School | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Use ref to ensure single supabase client instance across renders
-  const supabaseRef = useRef(createClient())
+  // Track if auth has been initialized (prevents double init on StrictMode)
   const initCalledRef = useRef(false)
 
   useEffect(() => {
@@ -53,7 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     initCalledRef.current = true
 
-    const supabase = supabaseRef.current
+    // Use singleton client
+    const supabase = createClient()
     let isMounted = true
     let initialCheckDone = false
 
@@ -117,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const fetchUserRoleAndSchools = async (userId: string) => {
-    const supabase = supabaseRef.current
+    const supabase = createClient()
 
     try {
       // Fetch user roles
@@ -162,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signOut = async () => {
-    const supabase = supabaseRef.current
+    const supabase = createClient()
     await supabase.auth.signOut()
     setUser(null)
     setUserRole(null)
