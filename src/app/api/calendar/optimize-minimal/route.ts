@@ -43,6 +43,7 @@ interface MinimalScheduleBlock {
   classroom_name: string
   type: 'work' | 'break' | 'lunch'
   notes?: string
+  sub_name?: string  // Who covers during break/lunch
 }
 
 interface MinimalTeacherSchedule {
@@ -209,6 +210,109 @@ export async function POST(request: NextRequest) {
       t.regular_shift_end
     )
 
+    // All potential substitutes including directors (they can help cover breaks/lunch)
+    const allPotentialSubs = teachers.filter(t =>
+      t.regular_shift_start &&
+      t.regular_shift_end
+    )
+
+    // Track substitute assignments to prevent double-booking
+    // Maps substitute ID -> array of { start, end } time ranges they're covering
+    const substituteAssignments = new Map<string, { start: number; end: number }[]>()
+
+    // Helper: Check if a teacher is working at a given time
+    const isTeacherWorking = (teacher: Teacher, timeMinutes: number): boolean => {
+      if (!teacher.regular_shift_start || !teacher.regular_shift_end) return false
+      const start = timeToMinutes(teacher.regular_shift_start)
+      const end = timeToMinutes(teacher.regular_shift_end)
+      return timeMinutes >= start && timeMinutes < end
+    }
+
+    // Helper: Check if a substitute is already assigned during a time range
+    const isSubstituteAssigned = (subId: string, startTime: number, endTime: number): boolean => {
+      const assignments = substituteAssignments.get(subId)
+      if (!assignments) return false
+      for (const assignment of assignments) {
+        if (startTime < assignment.end && assignment.start < endTime) {
+          return true
+        }
+      }
+      return false
+    }
+
+    // Helper: Record a substitute assignment
+    const recordSubstituteAssignment = (subId: string, startTime: number, endTime: number) => {
+      const existing = substituteAssignments.get(subId) || []
+      existing.push({ start: startTime, end: endTime })
+      substituteAssignments.set(subId, existing)
+    }
+
+    // Track break assignments for all essential teachers (to check for conflicts)
+    const breakAssignments = new Map<string, { break1: number; break2: number; lunchStart?: number; lunchEnd?: number }>()
+
+    // Helper: Check if teacher has any break/lunch that overlaps with a time range
+    const doesTeacherBreakOverlap = (teacher: Teacher, startTime: number, endTime: number): boolean => {
+      const assignment = breakAssignments.get(teacher.id)
+      if (assignment) {
+        // Check break1 (10 minutes)
+        const break1End = assignment.break1 + 10
+        if (startTime < break1End && assignment.break1 < endTime) return true
+        // Check break2 (10 minutes)
+        const break2End = assignment.break2 + 10
+        if (startTime < break2End && assignment.break2 < endTime) return true
+        // Check lunch period
+        if (assignment.lunchStart !== undefined && assignment.lunchEnd !== undefined) {
+          if (startTime < assignment.lunchEnd && assignment.lunchStart < endTime) return true
+        }
+      }
+      // Also check from teacher's own lunch_break_start/end fields
+      if (teacher.lunch_break_start && teacher.lunch_break_end) {
+        const lunchStart = timeToMinutes(teacher.lunch_break_start)
+        const lunchEnd = timeToMinutes(teacher.lunch_break_end)
+        if (startTime < lunchEnd && lunchStart < endTime) return true
+      }
+      return false
+    }
+
+    // Helper: Find a substitute teacher for a given break time
+    const findSubstitute = (
+      teacherOnBreak: Teacher,
+      breakTime: number,
+      breakDuration: number,
+      includingDirectors: boolean = false
+    ): string | null => {
+      // Get the classroom of the teacher on break
+      const teacherClassroom = classrooms.find(c => c.name === teacherOnBreak.classroom_title)
+      const isInfantRoom = teacherClassroom?.age_group === 'infant' || teacherClassroom?.age_group === 'toddler'
+
+      // Use all potential subs (including directors) or just essential teachers
+      const candidates = includingDirectors ? allPotentialSubs : allPotentialSubs.filter(t => essentialTeacherIds.has(t.id))
+
+      const breakEndTime = breakTime + breakDuration
+
+      // Find available teachers who can cover
+      for (const sub of candidates) {
+        if (sub.id === teacherOnBreak.id) continue // Can't substitute yourself
+        if (!isTeacherWorking(sub, breakTime)) continue // Not working at this time
+
+        // Check if sub has ANY break/lunch that overlaps with the coverage period
+        if (doesTeacherBreakOverlap(sub, breakTime, breakEndTime)) continue
+
+        // Check if already assigned to cover someone else during this time
+        if (isSubstituteAssigned(sub.id, breakTime, breakEndTime)) continue
+
+        // Check infant qualification if needed
+        if (isInfantRoom && !isInfantQualified(sub)) continue
+
+        // Found a valid substitute - record the assignment
+        recordSubstituteAssignment(sub.id, breakTime, breakEndTime)
+
+        return `${sub.first_name} helps`
+      }
+
+      return null // No substitute found
+    }
+
     // Active classrooms (with students)
     const activeClassrooms = classrooms.filter(c => {
       const count = studentsByClassroom.get(c.id)?.length || 0
@@ -297,6 +401,29 @@ export async function POST(request: NextRequest) {
       essentialTeacherIds.add(teacher.id)
     }
 
+    // First pass: Calculate and record all break times for essential teachers
+    for (const teacher of workingTeachers) {
+      if (essentialTeacherIds.has(teacher.id)) {
+        if (teacher.regular_shift_start && teacher.regular_shift_end) {
+          const shiftStart = timeToMinutes(teacher.regular_shift_start)
+          const shiftEnd = timeToMinutes(teacher.regular_shift_end)
+          const lunchStart = teacher.lunch_break_start ? timeToMinutes(teacher.lunch_break_start) : undefined
+          const lunchEnd = teacher.lunch_break_end ? timeToMinutes(teacher.lunch_break_end) : (lunchStart ? lunchStart + 60 : undefined)
+
+          // Calculate break times (staggered)
+          const break1Time = shiftStart + 120 // 2 hours after start
+          const break2Time = lunchEnd ? lunchEnd + 120 : shiftEnd - 90 // 2 hours after lunch
+
+          breakAssignments.set(teacher.id, {
+            break1: break1Time,
+            break2: break2Time,
+            lunchStart,
+            lunchEnd
+          })
+        }
+      }
+    }
+
     // Build schedules for essential teachers
     // They may need to float between classrooms
     for (const teacher of workingTeachers) {
@@ -328,16 +455,16 @@ export async function POST(request: NextRequest) {
           const break2Time = lunchEnd ? lunchEnd + 120 : shiftEnd - 90 // 2 hours after lunch
 
           let currentTime = shiftStart
-          const breakPoints = []
+          const breakPoints: { time: number; type: 'break' | 'lunch'; duration: number }[] = []
 
           if (break1Time > shiftStart + 60) {
-            breakPoints.push({ time: break1Time, type: 'break' as const, duration: 10 })
+            breakPoints.push({ time: break1Time, type: 'break', duration: 10 })
           }
           if (lunchStart && lunchEnd) {
-            breakPoints.push({ time: lunchStart, type: 'lunch' as const, duration: lunchEnd - lunchStart })
+            breakPoints.push({ time: lunchStart, type: 'lunch', duration: lunchEnd - lunchStart })
           }
           if (break2Time < shiftEnd - 30 && break2Time > (lunchEnd || shiftStart + 180)) {
-            breakPoints.push({ time: break2Time, type: 'break' as const, duration: 10 })
+            breakPoints.push({ time: break2Time, type: 'break', duration: 10 })
           }
 
           breakPoints.sort((a, b) => a.time - b.time)
@@ -351,12 +478,17 @@ export async function POST(request: NextRequest) {
                 type: 'work'
               })
             }
+            // Find substitute for this break/lunch
+            const includingDirectors = bp.type === 'lunch' // Directors can help cover lunch
+            const subName = findSubstitute(teacher, bp.time, bp.duration, includingDirectors)
+
             blocks.push({
               start_time: minutesToTime(bp.time),
               end_time: minutesToTime(bp.time + bp.duration),
               classroom_name: bp.type === 'lunch' ? 'Lunch' : 'Break',
               type: bp.type,
-              notes: bp.type === 'break' ? '10 minute break' : 'Lunch break'
+              notes: bp.type === 'break' ? '10 minute break' : 'Lunch break',
+              sub_name: subName || undefined
             })
             currentTime = bp.time + bp.duration
           }

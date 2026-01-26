@@ -180,6 +180,7 @@ interface MinimalScheduleBlock {
   classroom_name: string
   type: 'work' | 'break' | 'lunch'
   notes?: string
+  sub_name?: string  // Who covers during break/lunch
 }
 
 interface MinimalTeacherSchedule {
@@ -1328,6 +1329,12 @@ function MinimalScenarioCard({
                       {block.type === 'work' && block.classroom_name && (
                         <div className="text-gray-600 text-xs">{block.classroom_name}</div>
                       )}
+                      {/* Substitute info - highlighted */}
+                      {block.sub_name && (
+                        <div className="text-green-700 font-semibold text-xs mt-1">
+                          {block.sub_name}
+                        </div>
+                      )}
                     </td>
                   ))}
                   <td className="bg-gray-50"></td>
@@ -1374,6 +1381,10 @@ function MinimalScenarioCard({
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 bg-blue-50 border border-blue-300 rounded"></div>
           <span className="text-gray-700 font-medium">Lunch</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-green-700 font-semibold">Green text</span>
+          <span className="text-gray-700">= Substitute covering</span>
         </div>
       </div>
     </div>

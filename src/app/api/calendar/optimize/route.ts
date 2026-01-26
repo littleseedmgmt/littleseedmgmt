@@ -312,6 +312,26 @@ export async function POST(request: NextRequest) {
       return false
     }
 
+    // Helper: Check if teacher has any break/lunch that overlaps with a time range
+    const doesTeacherBreakOverlap = (teacher: Teacher, startTime: number, endTime: number): boolean => {
+      const assignment = breakAssignments.get(teacher.id)
+      if (assignment) {
+        // Check break1 (10 minutes)
+        const break1End = assignment.break1 + 10
+        if (startTime < break1End && assignment.break1 < endTime) return true
+        // Check break2 (10 minutes)
+        const break2End = assignment.break2 + 10
+        if (startTime < break2End && assignment.break2 < endTime) return true
+      }
+      // Check lunch period
+      if (teacher.lunch_break_start && teacher.lunch_break_end) {
+        const lunchStart = timeToMinutes(teacher.lunch_break_start)
+        const lunchEnd = timeToMinutes(teacher.lunch_break_end)
+        if (startTime < lunchEnd && lunchStart < endTime) return true
+      }
+      return false
+    }
+
     // Helper: Check if a substitute is already assigned during a time range
     const isSubstituteAssigned = (subId: string, startTime: number, endTime: number): boolean => {
       const assignments = substituteAssignments.get(subId)
@@ -357,17 +377,12 @@ export async function POST(request: NextRequest) {
       for (const sub of candidates) {
         if (sub.id === teacherOnBreak.id) continue // Can't substitute yourself
         if (!isTeacherWorking(sub, breakTime)) continue // Not working at this time
-        if (isTeacherOnBreak(sub.id, breakTime)) continue // Already on their own break
+
+        // Check if sub has ANY break/lunch that overlaps with the coverage period
+        if (doesTeacherBreakOverlap(sub, breakTime, breakEndTime)) continue
 
         // Check if already assigned to cover someone else during this time
         if (isSubstituteAssigned(sub.id, breakTime, breakEndTime)) continue
-
-        // Check lunch time (directors typically don't have set lunch times, so skip if not set)
-        if (sub.lunch_break_start) {
-          const lunchStart = timeToMinutes(sub.lunch_break_start)
-          const lunchEnd = sub.lunch_break_end ? timeToMinutes(sub.lunch_break_end) : lunchStart + 60
-          if (breakTime >= lunchStart && breakTime < lunchEnd) continue // On lunch
-        }
 
         // Check infant qualification if needed
         if (isInfantRoom && !isInfantQualified(sub)) continue
