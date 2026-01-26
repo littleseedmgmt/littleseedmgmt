@@ -391,35 +391,28 @@ export async function POST(request: NextRequest) {
       return getRequiredTeachers(classroom, studentCount, isNapTime, normalRatios, napRatios)
     }
 
-    // Helper: Check if a teacher can leave their classroom to substitute
-    // Returns true if: no classroom assigned, or classroom has surplus teachers
-    const canTeacherLeaveClassroom = (teacher: Teacher, startTime: number, endTime: number): boolean => {
-      // Directors and assistant directors can always help
-      if (teacher.role === 'director' || teacher.role === 'assistant_director') {
+    // Helper: Check if a teacher can substitute for someone in a different classroom
+    // STRICT RULE: Only directors/floaters can cover OTHER classrooms
+    // Teachers with assigned classrooms can only cover within their own classroom
+    const canTeacherSubstitute = (substitute: Teacher, teacherOnBreak: Teacher): boolean => {
+      // Directors and assistant directors can always help anyone
+      if (substitute.role === 'director' || substitute.role === 'assistant_director') {
         return true
       }
 
-      // Teachers without a classroom assignment (floaters) can always help
-      if (!teacher.classroom_title) {
+      // Teachers without a classroom assignment (floaters) can help anyone
+      if (!substitute.classroom_title) {
         return true
       }
 
-      // For teachers with a classroom, check if they can leave throughout the entire coverage period
-      // Check at start, middle, and end of the period
-      const checkTimes = [startTime, Math.floor((startTime + endTime) / 2), endTime - 1]
-
-      for (const checkTime of checkTimes) {
-        const currentTeachers = getClassroomTeacherCount(teacher.classroom_title, checkTime)
-        const requiredTeachers = getRequiredTeachersForClassroom(teacher.classroom_title, checkTime)
-
-        // Can only leave if there are more teachers than required (surplus)
-        // After this teacher leaves, we need at least requiredTeachers remaining
-        if (currentTeachers <= requiredTeachers) {
-          return false // Can't leave - would cause understaffing
-        }
+      // Teachers WITH a classroom can only substitute for someone in the SAME classroom
+      // This prevents pulling a teacher from Squirrels to cover Bunnies
+      if (substitute.classroom_title === teacherOnBreak.classroom_title) {
+        return true
       }
 
-      return true // Safe to leave - classroom has surplus coverage
+      // Different classrooms - cannot substitute
+      return false
     }
 
     // Helper: Find a substitute teacher for a given break time
@@ -455,9 +448,9 @@ export async function POST(request: NextRequest) {
         // Check infant qualification if needed
         if (isInfantRoom && !isInfantQualified(sub)) continue
 
-        // CRITICAL: Check if this teacher can actually leave their classroom
-        // They can only substitute if their own classroom has surplus coverage
-        if (!canTeacherLeaveClassroom(sub, breakTime, breakEndTime)) continue
+        // CRITICAL: Check if this teacher can substitute
+        // Only directors, floaters, or same-classroom teachers can substitute
+        if (!canTeacherSubstitute(sub, teacherOnBreak)) continue
 
         // Found a valid substitute - record the assignment
         recordSubstituteAssignment(sub.id, breakTime, breakEndTime)
