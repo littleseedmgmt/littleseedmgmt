@@ -924,14 +924,19 @@ export default function CalendarPage() {
       {/* OPTIMIZED SCENARIO - Minimal staff view */}
       {scenarioMode === 'optimized' && minimalResults.size > 0 && (
         <div className="space-y-6">
-          {Array.from(minimalResults.entries()).map(([schoolId, result]) => (
-            <MinimalScenarioCard
-              key={schoolId}
-              result={result}
-              getShortName={getShortName}
-              coverageSummary={optimizationResults.get(schoolId)?.coverage_summary}
-            />
-          ))}
+          {/* Use schedules array order to maintain consistent school ordering */}
+          {schedules.map((schedule) => {
+            const result = minimalResults.get(schedule.school.id)
+            if (!result) return null
+            return (
+              <MinimalScenarioCard
+                key={schedule.school.id}
+                result={result}
+                getShortName={getShortName}
+                coverageSummary={optimizationResults.get(schedule.school.id)?.coverage_summary}
+              />
+            )
+          })}
         </div>
       )}
     </div>
