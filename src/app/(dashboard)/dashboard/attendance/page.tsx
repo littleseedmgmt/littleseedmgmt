@@ -60,10 +60,18 @@ interface ParsedSummary {
   school_name?: string
 }
 
+// Helper to get local date string (YYYY-MM-DD)
+function getLocalDateString(d: Date = new Date()): string {
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export default function AttendancePage() {
   const { schools, currentSchool, isOwner, loading: authLoading } = useAuth()
   const { markDataReady } = useComponentPerf('AttendancePage')
-  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(() => getLocalDateString())
   const [summary, setSummary] = useState<AttendanceSummaryResponse | null>(null)
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [loading, setLoading] = useState(true)
@@ -71,7 +79,7 @@ export default function AttendancePage() {
   // Director Summary Modal State
   const [showImportModal, setShowImportModal] = useState(false)
   const [importSchoolId, setImportSchoolId] = useState('')
-  const [importDate, setImportDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [importDate, setImportDate] = useState(() => getLocalDateString())
   const [importMessage, setImportMessage] = useState('')
   const [parsedSummary, setParsedSummary] = useState<ParsedSummary | null>(null)
   const [parsing, setParsing] = useState(false)
@@ -163,7 +171,7 @@ export default function AttendancePage() {
 
   const resetImportModal = () => {
     setImportSchoolId('')
-    setImportDate(new Date().toISOString().split('T')[0])
+    setImportDate(getLocalDateString())
     setImportMessage('')
     setParsedSummary(null)
     setImportError('')
@@ -282,9 +290,9 @@ export default function AttendancePage() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => {
-                const d = new Date(date)
+                const d = new Date(date + 'T12:00:00') // Use noon to avoid timezone issues
                 d.setDate(d.getDate() - 1)
-                setDate(d.toISOString().split('T')[0])
+                setDate(getLocalDateString(d))
               }}
               className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50"
             >
@@ -302,9 +310,9 @@ export default function AttendancePage() {
 
             <button
               onClick={() => {
-                const d = new Date(date)
+                const d = new Date(date + 'T12:00:00') // Use noon to avoid timezone issues
                 d.setDate(d.getDate() + 1)
-                setDate(d.toISOString().split('T')[0])
+                setDate(getLocalDateString(d))
               }}
               className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50"
             >
@@ -314,7 +322,7 @@ export default function AttendancePage() {
             </button>
 
             <button
-              onClick={() => setDate(new Date().toISOString().split('T')[0])}
+              onClick={() => setDate(getLocalDateString())}
               className="px-4 py-2 text-sm font-medium text-brand border border-brand rounded-lg hover:bg-brand/5"
             >
               Today
