@@ -409,20 +409,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Save optimization result to database for future retrieval
+    // First delete any existing record, then insert fresh
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from('optimization_results')
+      .delete()
+      .eq('school_id', school_id)
+      .eq('date', date)
+      .eq('result_type', 'minimal')
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: saveError } = await (supabase as any)
       .from('optimization_results')
-      .upsert({
+      .insert({
         school_id,
         date,
         result_type: 'minimal',
-        result_data: result,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'school_id,date,result_type' })
+        result_data: result
+      })
 
     if (saveError) {
-      console.error('[Optimize-Minimal] Error saving result:', saveError.message)
-      // Don't fail the request - just log the error
+      console.error('[Optimize-Minimal] Error saving result:', saveError.message, saveError)
+    } else {
+      console.log('[Optimize-Minimal] Result saved successfully for', school_id, date)
     }
 
     return NextResponse.json(result)
