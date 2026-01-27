@@ -162,14 +162,16 @@ export async function POST(request: NextRequest) {
 
     // Fetch remaining data in parallel (all array queries)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [teachersRes, classroomsRes, studentsRes, attendanceRes, settingsRes, ptoRes] = await Promise.all([
+    const [teachersRes, classroomsRes, studentsRes, attendanceRes, settingsRes, ptoRes, dailySummaryRes] = await Promise.all([
       supabase.from('teachers').select('*').eq('school_id', school_id).eq('status', 'active'),
       supabase.from('classrooms').select('*').eq('school_id', school_id),
       supabase.from('students').select('*').eq('school_id', school_id).eq('status', 'enrolled'),
       supabase.from('attendance').select('*').eq('school_id', school_id).eq('date', date).eq('status', 'present'),
       (supabase as any).from('school_settings').select('*').or(`school_id.is.null,school_id.eq.${school_id}`),
       // Fetch approved PTO requests that cover the selected date
-      supabase.from('pto_requests').select('teacher_id').eq('school_id', school_id).eq('status', 'approved').lte('start_date', date).gte('end_date', date)
+      supabase.from('pto_requests').select('teacher_id').eq('school_id', school_id).eq('status', 'approved').lte('start_date', date).gte('end_date', date),
+      // Fetch director's daily summary for teacher absences
+      (supabase as any).from('director_daily_summaries').select('teacher_absences').eq('school_id', school_id).eq('date', date).maybeSingle()
     ])
 
     const allTeachers = (teachersRes.data || []) as Teacher[]
@@ -179,12 +181,26 @@ export async function POST(request: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const settings = (settingsRes.data || []) as { setting_key: string; setting_value: any }[]
     const ptoRecords = (ptoRes.data || []) as { teacher_id: string }[]
+    const dailySummary = dailySummaryRes.data as { teacher_absences: string[] } | null
 
     // Get set of teacher IDs who are out on PTO for this date
     const teachersOnPTO = new Set(ptoRecords.map(p => p.teacher_id))
 
-    // Filter out teachers who are on PTO
-    const teachers = allTeachers.filter(t => !teachersOnPTO.has(t.id))
+    // Get teacher names who are absent from director's daily summary
+    const absentTeacherNames = new Set(
+      (dailySummary?.teacher_absences || []).map(name => name.toLowerCase().trim())
+    )
+
+    // Filter out teachers who are on PTO OR marked absent in daily summary
+    const teachers = allTeachers.filter(t => {
+      // Check PTO by ID
+      if (teachersOnPTO.has(t.id)) return false
+      // Check daily summary by name (first name match)
+      const firstName = t.first_name.toLowerCase().trim()
+      const fullName = `${t.first_name} ${t.last_name}`.toLowerCase().trim()
+      if (absentTeacherNames.has(firstName) || absentTeacherNames.has(fullName)) return false
+      return true
+    })
 
 
     // Get ratio settings
