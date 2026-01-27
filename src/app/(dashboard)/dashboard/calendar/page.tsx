@@ -170,6 +170,7 @@ interface OptimizationResult {
     total_teachers: number
     teachers_needed_peak: number
     teachers_needed_nap: number
+    total_students_present?: number
   }
 }
 
@@ -954,6 +955,7 @@ function SchoolTimelineCard({
     total_teachers: number
     teachers_needed_peak: number
     teachers_needed_nap: number
+    total_students_present?: number
   }
 }) {
   const getShortName = (name: string) => {
@@ -992,6 +994,12 @@ function SchoolTimelineCard({
           </h2>
           {coverageSummary && (
             <div className="flex items-center gap-6 text-sm">
+              {coverageSummary.total_students_present !== undefined && (
+                <div className="text-center" title="Students marked present for this date">
+                  <span className="text-xl font-bold text-purple-600">{coverageSummary.total_students_present}</span>
+                  <span className="text-gray-600 ml-1">Students</span>
+                </div>
+              )}
               <div className="text-center">
                 <span className="text-xl font-bold text-brand">{coverageSummary.total_teachers}</span>
                 <span className="text-gray-600 ml-1">Available</span>
@@ -1128,6 +1136,7 @@ function SchoolDayCard({
     total_teachers: number
     teachers_needed_peak: number
     teachers_needed_nap: number
+    total_students_present?: number
   }
 }) {
   const getShortName = (name: string) => {
@@ -1147,6 +1156,12 @@ function SchoolDayCard({
           </h2>
           {coverageSummary && (
             <div className="flex items-center gap-6 text-sm">
+              {coverageSummary.total_students_present !== undefined && (
+                <div className="text-center" title="Students marked present for this date">
+                  <span className="text-xl font-bold text-purple-600">{coverageSummary.total_students_present}</span>
+                  <span className="text-gray-600 ml-1">Students</span>
+                </div>
+              )}
               <div className="text-center">
                 <span className="text-xl font-bold text-brand">{coverageSummary.total_teachers}</span>
                 <span className="text-gray-600 ml-1">Available</span>
@@ -1245,6 +1260,7 @@ function MinimalScenarioCard({
     total_teachers: number
     teachers_needed_peak: number
     teachers_needed_nap: number
+    total_students_present?: number
   }
 }) {
   const formatTimeDisplay = (time: string): string => {

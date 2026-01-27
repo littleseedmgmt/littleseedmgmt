@@ -69,6 +69,7 @@ interface OptimizationResult {
     total_teachers: number
     teachers_needed_peak: number
     teachers_needed_nap: number
+    total_students_present: number  // Students marked present for the day
   }
 }
 
@@ -792,7 +793,8 @@ export async function POST(request: NextRequest) {
       coverage_summary: {
         total_teachers: totalTeachers,
         teachers_needed_peak: peakTeachersNeeded,
-        teachers_needed_nap: napTeachersNeeded
+        teachers_needed_nap: napTeachersNeeded,
+        total_students_present: presentStudents.length
       }
     }
 
