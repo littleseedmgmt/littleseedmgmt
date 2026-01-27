@@ -139,6 +139,7 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 type DayViewMode = 'schedule' | 'timeline'
+type ViewPerspective = 'teacher' | 'classroom'
 
 interface OptimizedBreak {
   teacher_id: string
@@ -213,6 +214,7 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [view, setView] = useState<'day' | 'week'>('day')
   const [dayViewMode, setDayViewMode] = useState<DayViewMode>('timeline')
+  const [viewPerspective, setViewPerspective] = useState<ViewPerspective>('teacher')
   const [schedules, setSchedules] = useState<SchoolDaySchedule[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -756,6 +758,28 @@ export default function CalendarPage() {
             </div>
           )}
 
+          {/* View Perspective Toggle (Teacher vs Classroom) - only in day+timeline mode */}
+          {view === 'day' && dayViewMode === 'timeline' && (
+            <div className="flex bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewPerspective('teacher')}
+                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                  viewPerspective === 'teacher' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                By Teacher
+              </button>
+              <button
+                onClick={() => setViewPerspective('classroom')}
+                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                  viewPerspective === 'classroom' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                By Classroom
+              </button>
+            </div>
+          )}
+
           {/* Navigation */}
           <div className="flex items-center gap-2">
             <button
@@ -930,13 +954,30 @@ export default function CalendarPage() {
       {scenarioMode === 'actual' && (
         <>
           {/* Day View - Timeline Mode (Hour-based grid) */}
-          {view === 'day' && dayViewMode === 'timeline' && (
+          {view === 'day' && dayViewMode === 'timeline' && viewPerspective === 'teacher' && (
             <div className="flex flex-col gap-6">
               {getScheduleWithBreaks().map((schedule) => (
                 <SchoolTimelineCard
                   key={schedule.school.id}
                   schedule={schedule}
                   coverageSummary={optimizationResults.get(schedule.school.id)?.coverage_summary}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  absentTeachers={(optimizationResults.get(schedule.school.id) as any)?._debug?.teacher_absences || []}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Day View - Classroom Mode (Classroom-centric view) */}
+          {view === 'day' && dayViewMode === 'timeline' && viewPerspective === 'classroom' && (
+            <div className="flex flex-col gap-6">
+              {getScheduleWithBreaks().map((schedule) => (
+                <SchoolClassroomView
+                  key={schedule.school.id}
+                  schedule={schedule}
+                  coverageSummary={optimizationResults.get(schedule.school.id)?.coverage_summary}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  studentCountsByAgeGroup={(optimizationResults.get(schedule.school.id) as any)?._debug?.student_counts_from_director || []}
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   absentTeachers={(optimizationResults.get(schedule.school.id) as any)?._debug?.teacher_absences || []}
                 />
@@ -1181,6 +1222,322 @@ function SchoolTimelineCard({
       {schedule.staff.length === 0 && (
         <div className="p-6 text-center text-gray-500 text-sm">
           No staff schedules for this day
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Classroom-centric view - shows classrooms as rows with hourly time slots
+function SchoolClassroomView({
+  schedule,
+  coverageSummary,
+  studentCountsByAgeGroup = [],
+  absentTeachers = []
+}: {
+  schedule: SchoolDaySchedule
+  coverageSummary?: {
+    total_teachers: number
+    teachers_needed_peak: number
+    teachers_needed_nap: number
+    total_students_present?: number
+  }
+  studentCountsByAgeGroup?: { age_group: string; count: number }[]
+  absentTeachers?: string[]
+}) {
+  const getShortName = (name: string) => {
+    if (name === 'Peter Pan Mariner Square') return 'Mariner Square'
+    if (name === "Little Seeds Children's Center") return 'Little Seeds'
+    if (name === 'Peter Pan Harbor Bay') return 'Harbor Bay'
+    return name
+  }
+
+  // Get all unique classrooms from the schedule
+  const classroomsSet = new Set<string>()
+  for (const staffSchedule of schedule.staff) {
+    for (const block of staffSchedule.blocks) {
+      if (block.classroom_name && block.type === 'work') {
+        classroomsSet.add(block.classroom_name)
+      }
+    }
+    // Also add teacher's assigned classroom
+    if (staffSchedule.teacher.classroom_title) {
+      classroomsSet.add(staffSchedule.teacher.classroom_title)
+    }
+  }
+  const classrooms = Array.from(classroomsSet).sort()
+
+  // Define time slots (hourly from 7am to 6pm)
+  const timeSlots: { hour: number; label: string }[] = []
+  for (let hour = 7; hour <= 17; hour++) {
+    const displayHour = hour > 12 ? hour - 12 : hour
+    const ampm = hour >= 12 ? 'pm' : 'am'
+    timeSlots.push({ hour, label: `${displayHour}${ampm}` })
+  }
+
+  // Helper to convert time string to hour
+  const timeToHour = (time: string): number => {
+    const [hours] = time.split(':').map(Number)
+    return hours
+  }
+
+  // Map age groups to classrooms (rough mapping based on common naming)
+  const getAgeGroupForClassroom = (classroomName: string): string | null => {
+    const name = classroomName.toLowerCase()
+    if (name.includes('infant')) return 'infant'
+    if (name.includes('toddler')) return 'toddler'
+    if (name.includes('2') || name.includes('two')) return 'twos'
+    if (name.includes('3') || name.includes('three')) return 'threes'
+    if (name.includes('4') || name.includes('four') || name.includes('pre-k') || name.includes('prek')) return 'pre_k'
+    if (name.includes('preschool')) return 'preschool'
+    // Common classroom names
+    if (name.includes('bunny') || name.includes('bunnies')) return 'twos'
+    if (name.includes('bear')) return 'preschool'
+    if (name.includes('squirrel')) return 'threes'
+    return null
+  }
+
+  // Get student count for a classroom
+  const getStudentCount = (classroomName: string): number | null => {
+    if (!studentCountsByAgeGroup || studentCountsByAgeGroup.length === 0) return null
+    const ageGroup = getAgeGroupForClassroom(classroomName)
+    if (!ageGroup) return null
+    const match = studentCountsByAgeGroup.find(s => s.age_group === ageGroup)
+    return match?.count ?? null
+  }
+
+  // Get teachers in a classroom at a specific hour
+  const getTeachersAtHour = (classroomName: string, hour: number): { name: string; isOnBreak: boolean; coveringFrom?: string }[] => {
+    const teachers: { name: string; isOnBreak: boolean; coveringFrom?: string }[] = []
+    const hourStart = hour * 60
+    const hourEnd = (hour + 1) * 60
+
+    for (const staffSchedule of schedule.staff) {
+      const teacherName = staffSchedule.teacher.first_name
+
+      for (const block of staffSchedule.blocks) {
+        const blockStart = timeToHour(block.start_time) * 60 + parseInt(block.start_time.split(':')[1] || '0')
+        const blockEnd = timeToHour(block.end_time) * 60 + parseInt(block.end_time.split(':')[1] || '0')
+
+        // Check if this block overlaps with the hour
+        if (blockStart < hourEnd && blockEnd > hourStart) {
+          if (block.type === 'work' && block.classroom_name === classroomName) {
+            // Teacher is working in this classroom
+            if (!teachers.find(t => t.name === teacherName)) {
+              teachers.push({ name: teacherName, isOnBreak: false })
+            }
+          } else if ((block.type === 'break' || block.type === 'lunch') && block.substitute_name) {
+            // Someone is covering for this teacher - check if the covering teacher's classroom is this one
+            const coveringTeacherName = block.substitute_name.replace(' helps', '')
+            const teacherClassroom = staffSchedule.teacher.classroom_title
+
+            if (teacherClassroom === classroomName) {
+              // The teacher on break is from this classroom, show their substitute
+              if (!teachers.find(t => t.name === coveringTeacherName)) {
+                teachers.push({
+                  name: coveringTeacherName,
+                  isOnBreak: false,
+                  coveringFrom: `covering for ${teacherName}`
+                })
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return teachers
+  }
+
+  // Check if any teacher from this classroom is on break at this hour
+  const getBreakInfo = (classroomName: string, hour: number): { teacherName: string; breakType: string; substitute?: string }[] => {
+    const breaks: { teacherName: string; breakType: string; substitute?: string }[] = []
+    const hourStart = hour * 60
+    const hourEnd = (hour + 1) * 60
+
+    for (const staffSchedule of schedule.staff) {
+      if (staffSchedule.teacher.classroom_title !== classroomName) continue
+
+      for (const block of staffSchedule.blocks) {
+        if (block.type !== 'break' && block.type !== 'lunch') continue
+
+        const blockStart = timeToHour(block.start_time) * 60 + parseInt(block.start_time.split(':')[1] || '0')
+        const blockEnd = timeToHour(block.end_time) * 60 + parseInt(block.end_time.split(':')[1] || '0')
+
+        if (blockStart < hourEnd && blockEnd > hourStart) {
+          breaks.push({
+            teacherName: staffSchedule.teacher.first_name,
+            breakType: block.type === 'lunch' ? 'Lunch' : 'Break',
+            substitute: block.substitute_name?.replace(' helps', '')
+          })
+        }
+      }
+    }
+
+    return breaks
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden print:rounded-none print:border-black">
+      {/* School Header with Coverage Summary */}
+      <div className="bg-green-100 px-4 py-3 border-b border-green-200 print:bg-green-50">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">
+            {getShortName(schedule.school.name)}
+          </h2>
+          {coverageSummary && (
+            <div className="flex items-center gap-6 text-sm">
+              {coverageSummary.total_students_present !== undefined && (
+                <div className="text-center" title="Students marked present for this date">
+                  <span className="text-xl font-bold text-purple-600">{coverageSummary.total_students_present}</span>
+                  <span className="text-gray-600 ml-1">Students</span>
+                </div>
+              )}
+              <div className="text-center">
+                <span className="text-xl font-bold text-brand">{coverageSummary.total_teachers}</span>
+                <span className="text-gray-600 ml-1">Available</span>
+              </div>
+              <div className="text-center" title="Teachers needed based on student-to-teacher ratios at 10am">
+                <span className="text-xl font-bold text-gray-700">{coverageSummary.teachers_needed_peak}</span>
+                <span className="text-gray-600 ml-1">Peak Need</span>
+              </div>
+              <div className="text-center" title="Teachers needed during nap time (relaxed ratios)">
+                <span className="text-xl font-bold text-blue-600">{coverageSummary.teachers_needed_nap}</span>
+                <span className="text-gray-600 ml-1">Nap Time</span>
+              </div>
+              {coverageSummary.total_teachers > coverageSummary.teachers_needed_peak && (
+                <div className="bg-green-200 text-green-800 px-2 py-1 rounded text-xs font-medium">
+                  +{coverageSummary.total_teachers - coverageSummary.teachers_needed_peak} buffer
+                </div>
+              )}
+              {coverageSummary.total_teachers < coverageSummary.teachers_needed_peak && (
+                <div className="bg-red-200 text-red-800 px-2 py-1 rounded text-xs font-medium">
+                  -{coverageSummary.teachers_needed_peak - coverageSummary.total_teachers} short
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {/* Absent teachers indicator */}
+        {absentTeachers.length > 0 && (
+          <div className="mt-1 text-xs text-gray-500">
+            <span className="text-red-500">Out today:</span> {absentTeachers.join(', ')}
+          </div>
+        )}
+      </div>
+
+      {/* Classroom Schedule Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="w-32 min-w-[128px] px-3 py-2 text-left text-sm font-semibold text-gray-700 border-r border-gray-200">
+                Classroom
+              </th>
+              {timeSlots.map(slot => (
+                <th
+                  key={slot.hour}
+                  className="min-w-[80px] px-2 py-2 text-center text-sm font-semibold text-gray-700 border-r border-gray-200"
+                >
+                  {slot.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {classrooms.map((classroom, classroomIdx) => {
+              const studentCount = getStudentCount(classroom)
+              return (
+                <tr
+                  key={classroom}
+                  className={classroomIdx > 0 ? 'border-t border-gray-200' : ''}
+                >
+                  {/* Classroom Name with student count */}
+                  <td className="w-32 min-w-[128px] px-3 py-3 border-r border-gray-200 bg-gray-50 align-top">
+                    <div className="font-bold text-gray-900 text-sm">{classroom}</div>
+                    {studentCount !== null && (
+                      <div className="text-xs text-purple-600 font-medium mt-1">
+                        {studentCount} students
+                      </div>
+                    )}
+                  </td>
+
+                  {/* Time slot cells */}
+                  {timeSlots.map(slot => {
+                    const teachers = getTeachersAtHour(classroom, slot.hour)
+                    const breaks = getBreakInfo(classroom, slot.hour)
+
+                    return (
+                      <td
+                        key={slot.hour}
+                        className="min-w-[80px] px-2 py-2 border-r border-gray-200 align-top text-xs"
+                      >
+                        {/* Teachers present */}
+                        {teachers.map((teacher, idx) => (
+                          <div
+                            key={idx}
+                            className={`${teacher.coveringFrom ? 'text-green-700 font-semibold' : 'text-gray-900'}`}
+                            title={teacher.coveringFrom}
+                          >
+                            {teacher.name}
+                            {teacher.coveringFrom && <span className="text-green-600">*</span>}
+                          </div>
+                        ))}
+
+                        {/* Break info */}
+                        {breaks.map((brk, idx) => (
+                          <div key={idx} className="text-orange-600 text-xs mt-1">
+                            <span className="font-medium">{brk.teacherName}</span>
+                            <span className="text-orange-500"> ({brk.breakType})</span>
+                            {brk.substitute && (
+                              <div className="text-green-600 text-xs">
+                                {brk.substitute} covers
+                              </div>
+                            )}
+                            {!brk.substitute && (
+                              <div className="text-red-500 text-xs">No coverage</div>
+                            )}
+                          </div>
+                        ))}
+
+                        {/* Empty cell indicator */}
+                        {teachers.length === 0 && breaks.length === 0 && (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Legend */}
+      <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex gap-6 text-xs print:bg-white">
+        <div className="flex items-center gap-2">
+          <span className="text-gray-900 font-medium">Name</span>
+          <span className="text-gray-600">= Teacher in classroom</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-green-700 font-semibold">Name*</span>
+          <span className="text-gray-600">= Substitute covering</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-orange-600 font-medium">Name (Break)</span>
+          <span className="text-gray-600">= Teacher on break</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-red-500 font-semibold">No coverage</span>
+          <span className="text-gray-600">= No substitute available</span>
+        </div>
+      </div>
+
+      {/* Empty state */}
+      {classrooms.length === 0 && (
+        <div className="p-6 text-center text-gray-500 text-sm">
+          No classroom data available for this day
         </div>
       )}
     </div>
