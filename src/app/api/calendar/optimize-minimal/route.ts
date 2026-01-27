@@ -154,13 +154,16 @@ export async function POST(request: NextRequest) {
       (supabase as any).from('school_settings').select('*').or(`school_id.is.null,school_id.eq.${school_id}`),
       // Fetch approved PTO requests that cover the selected date
       supabase.from('pto_requests').select('teacher_id').eq('school_id', school_id).eq('status', 'approved').lte('start_date', date).gte('end_date', date),
-      // Fetch director's daily summary for teacher absences
-      (supabase as any).from('director_daily_summaries').select('teacher_absences').eq('school_id', school_id).eq('date', date).maybeSingle()
+      // Fetch director's daily summary for teacher absences AND student counts
+      (supabase as any).from('director_daily_summaries').select('teacher_absences, student_counts').eq('school_id', school_id).eq('date', date).maybeSingle()
     ])
 
     const allTeachers = (teachersRes.data || []) as Teacher[]
     const ptoRecords = (ptoRes.data || []) as { teacher_id: string }[]
-    const dailySummary = dailySummaryRes.data as { teacher_absences: string[] } | null
+    const dailySummary = dailySummaryRes.data as {
+      teacher_absences: string[]
+      student_counts?: { age_group: string; count: number }[]
+    } | null
 
     // Get set of teacher IDs who are out on PTO for this date
     const teachersOnPTO = new Set(ptoRecords.map(p => p.teacher_id))
@@ -226,35 +229,107 @@ export async function POST(request: NextRequest) {
       return false
     }
 
+    // Circle time - when preschoolers (2s, 3s, 4s) are combined for story time
+    // This frees up teachers to take breaks. Typically 10-15 minutes before major activities.
+    const circleTimesSetting = settings.find((s: { setting_key: string }) => s.setting_key === 'circle_times')
+    interface CircleTimePeriod {
+      start: string
+      end: string
+      age_groups: string[]
+    }
+    const defaultCircleTimes: CircleTimePeriod[] = [
+      { start: '09:15', end: '09:30', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] },
+      { start: '11:45', end: '12:00', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] },
+      { start: '14:45', end: '15:00', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] },
+    ]
+    const circleTimes: CircleTimePeriod[] = circleTimesSetting?.setting_value || defaultCircleTimes
+
+    // Helper: Check if a time is during circle time for a specific age group
+    const isDuringCircleTime = (timeMinutes: number, ageGroup: string): boolean => {
+      for (const period of circleTimes) {
+        const start = timeToMinutes(period.start)
+        const end = timeToMinutes(period.end)
+        if (timeMinutes >= start && timeMinutes < end && period.age_groups.includes(ageGroup)) {
+          return true
+        }
+      }
+      return false
+    }
+
     const warnings: string[] = []
 
-    // Get present students
-    // If no attendance records for this date, assume all enrolled students are present
-    let presentStudents: Student[]
-    if (attendance.length === 0) {
+    // Get present students count
+    // Priority: 1) Director override (student_counts), 2) Attendance records, 3) All enrolled
+    let presentStudents: Student[] = []
+    const studentsByClassroom = new Map<string, Student[]>()
+    let totalStudentsFromDirector = 0
+
+    // Check if director override has student counts (source of truth when present)
+    if (dailySummary?.student_counts && dailySummary.student_counts.length > 0) {
+      console.log('[Optimize-Minimal] Using director override student counts:', dailySummary.student_counts)
+      // Director override: map age_group -> classroom(s) and use the counts
+      // If multiple classrooms exist for the same age group, divide students equally
+      for (const { age_group, count } of dailySummary.student_counts) {
+        // Find ALL classrooms matching this age group
+        const matchingClassrooms = classrooms.filter(c => c.age_group === age_group)
+        if (matchingClassrooms.length > 0 && count > 0) {
+          // Divide students equally among classrooms with this age group
+          const studentsPerClassroom = Math.floor(count / matchingClassrooms.length)
+          let remainder = count % matchingClassrooms.length
+
+          for (const classroom of matchingClassrooms) {
+            // Distribute remainder to first classrooms
+            const thisClassroomCount = studentsPerClassroom + (remainder > 0 ? 1 : 0)
+            if (remainder > 0) remainder--
+
+            // Create placeholder student objects for the count
+            const placeholderStudents: Student[] = []
+            for (let i = 0; i < thisClassroomCount; i++) {
+              placeholderStudents.push({
+                id: `director-override-${age_group}-${classroom.id}-${i}`,
+                classroom_id: classroom.id,
+                nap_start: null,
+                nap_end: null
+              })
+            }
+            studentsByClassroom.set(classroom.id, placeholderStudents)
+            presentStudents.push(...placeholderStudents)
+          }
+          totalStudentsFromDirector += count
+        }
+      }
+      console.log('[Optimize-Minimal] Total students from director override:', totalStudentsFromDirector)
+    } else if (attendance.length > 0) {
+      // Use attendance records
+      const presentStudentIds = new Set(attendance.map(a => a.student_id))
+      presentStudents = students.filter(s => presentStudentIds.has(s.id))
+      // Count students per classroom
+      for (const student of presentStudents) {
+        if (student.classroom_id) {
+          const existing = studentsByClassroom.get(student.classroom_id) || []
+          existing.push(student)
+          studentsByClassroom.set(student.classroom_id, existing)
+        }
+      }
+    } else {
       // No attendance data - use all enrolled students for planning
       presentStudents = students
       if (students.length > 0) {
         warnings.push('No attendance data for this date - using all enrolled students for calculation')
       }
-    } else {
-      const presentStudentIds = new Set(attendance.map(a => a.student_id))
-      presentStudents = students.filter(s => presentStudentIds.has(s.id))
+      // Count students per classroom
+      for (const student of presentStudents) {
+        if (student.classroom_id) {
+          const existing = studentsByClassroom.get(student.classroom_id) || []
+          existing.push(student)
+          studentsByClassroom.set(student.classroom_id, existing)
+        }
+      }
     }
 
     // Check if we have any students
     if (presentStudents.length === 0) {
       warnings.push('No enrolled students found for this school')
-    }
-
-    // Count students per classroom
-    const studentsByClassroom = new Map<string, Student[]>()
-    for (const student of presentStudents) {
-      if (student.classroom_id) {
-        const existing = studentsByClassroom.get(student.classroom_id) || []
-        existing.push(student)
-        studentsByClassroom.set(student.classroom_id, existing)
-      }
     }
 
     // Get working teachers (exclude directors)
@@ -396,23 +471,119 @@ export async function POST(request: NextRequest) {
       return freedTeachers
     }
 
+    // Helper: Get list of teachers who are "freed" during circle time
+    const getFreedTeachersDuringCircleTime = (timeMinutes: number): Set<string> => {
+      const freedTeachers = new Set<string>()
+
+      const classroomsInCircleTime: { classroom: Classroom; studentCount: number; teachers: Teacher[] }[] = []
+
+      for (const classroom of classrooms) {
+        const ageGroup = classroom.age_group
+        if (!isDuringCircleTime(timeMinutes, ageGroup)) continue
+
+        const studentCount = (studentsByClassroom.get(classroom.id) || []).length
+        if (studentCount === 0) continue
+
+        const classroomTeachers = workingTeachers.filter(t =>
+          essentialTeacherIds.has(t.id) && t.classroom_title === classroom.name
+        )
+        classroomsInCircleTime.push({ classroom, studentCount, teachers: classroomTeachers })
+      }
+
+      if (classroomsInCircleTime.length <= 1) return freedTeachers
+
+      const totalStudents = classroomsInCircleTime.reduce((sum, r) => sum + r.studentCount, 0)
+      const combinedTeachersNeeded = Math.ceil(totalStudents / 12)
+      const allTeachers = classroomsInCircleTime.flatMap(r => r.teachers)
+
+      if (allTeachers.length > combinedTeachersNeeded) {
+        const freedCount = allTeachers.length - combinedTeachersNeeded
+        for (let i = allTeachers.length - freedCount; i < allTeachers.length; i++) {
+          freedTeachers.add(allTeachers[i].id)
+        }
+      }
+
+      return freedTeachers
+    }
+
+    // Helper: Check if there's at least one infant-qualified teacher in a classroom at a given time
+    const hasInfantQualifiedTeacher = (classroomName: string, timeMinutes: number, excludeTeacherId?: string): boolean => {
+      for (const teacher of workingTeachers) {
+        if (!essentialTeacherIds.has(teacher.id)) continue
+        if (teacher.id === excludeTeacherId) continue
+        if (teacher.classroom_title !== classroomName) continue
+        if (!isTeacherWorking(teacher, timeMinutes)) continue
+        if (isTeacherOnBreak(teacher.id, timeMinutes)) continue
+        if (isSubstituteAssigned(teacher.id, timeMinutes, timeMinutes + 1)) continue
+        if (isInfantQualified(teacher)) return true
+      }
+      return false
+    }
+
     // Helper: Check if a teacher can substitute for someone in a different classroom
-    // STRICT RULE: Only directors/floaters can cover OTHER classrooms
-    // EXCEPTION: During playground time, freed teachers from combined classrooms can help
-    const canTeacherSubstitute = (substitute: Teacher, teacherOnBreak: Teacher, breakTime: number): boolean => {
+    // KEY RULE: Any teacher can help any classroom as long as RATIO is maintained
+    // INFANT SPECIAL RULE: Non-infant-qualified can help infant room ONLY IF accompanied by infant-qualified
+    const canTeacherSubstitute = (substitute: Teacher, teacherOnBreak: Teacher, breakTime: number, breakDuration: number = 10): boolean => {
       // Directors and assistant directors can always help anyone
       if (substitute.role === 'director' || substitute.role === 'assistant_director') return true
+
       // Teachers without a classroom assignment (floaters) can help anyone
-      if (!substitute.classroom_title) return true
-      // Teachers WITH a classroom can only substitute for someone in the SAME classroom
+      if (!substitute.classroom_title) {
+        // But check infant qualification rule
+        const targetClassroom = classrooms.find(c => c.name === teacherOnBreak.classroom_title)
+        const isInfantRoom = targetClassroom?.age_group === 'infant' || targetClassroom?.age_group === 'toddler'
+        if (isInfantRoom && !isInfantQualified(substitute)) {
+          // Non-qualified can help infant room ONLY if there's already an infant-qualified teacher there
+          if (!hasInfantQualifiedTeacher(teacherOnBreak.classroom_title || '', breakTime, teacherOnBreak.id)) {
+            return false
+          }
+        }
+        return true
+      }
+
+      // Teachers WITH a classroom can help someone in the SAME classroom
       if (substitute.classroom_title === teacherOnBreak.classroom_title) return true
 
-      // PLAYGROUND OPTIMIZATION: During playground time, teachers who are "freed"
-      // due to combined ratios can substitute for others
-      const freedTeachers = getFreedTeachersDuringPlayground(breakTime)
-      if (freedTeachers.has(substitute.id)) return true
+      // ANY teacher can leave their classroom and help ANY other classroom
+      // The ONLY rule is: ratio must be maintained in their own classroom
 
-      // Different classrooms - cannot substitute
+      // Check if substitute's classroom would still have good ratio without them
+      const subClassroomName = substitute.classroom_title
+      const currentTeachers = getClassroomTeacherCount(subClassroomName, breakTime)
+      const requiredTeachers = getRequiredTeachersForClassroom(subClassroomName, breakTime)
+
+      // If removing this teacher still leaves enough coverage, they can help elsewhere
+      if (currentTeachers > requiredTeachers) {
+        // INFANT SPECIAL RULE: Non-infant-qualified can help infant room
+        // ONLY IF there's already an infant-qualified teacher present
+        const targetClassroom = classrooms.find(c => c.name === teacherOnBreak.classroom_title)
+        const isInfantRoom = targetClassroom?.age_group === 'infant' || targetClassroom?.age_group === 'toddler'
+        if (isInfantRoom && !isInfantQualified(substitute)) {
+          if (!hasInfantQualifiedTeacher(teacherOnBreak.classroom_title || '', breakTime, teacherOnBreak.id)) {
+            return false // Can't be alone with infants without qualification
+          }
+        }
+        return true
+      }
+
+      // PLAYGROUND/CIRCLE TIME OPTIMIZATION: During these times, teachers who are "freed"
+      // due to combined ratios can substitute for others
+      const freedPlaygroundTeachers = getFreedTeachersDuringPlayground(breakTime)
+      const freedCircleTimeTeachers = getFreedTeachersDuringCircleTime(breakTime)
+
+      if (freedPlaygroundTeachers.has(substitute.id) || freedCircleTimeTeachers.has(substitute.id)) {
+        // Still check infant rule
+        const targetClassroom = classrooms.find(c => c.name === teacherOnBreak.classroom_title)
+        const isInfantRoom = targetClassroom?.age_group === 'infant' || targetClassroom?.age_group === 'toddler'
+        if (isInfantRoom && !isInfantQualified(substitute)) {
+          if (!hasInfantQualifiedTeacher(teacherOnBreak.classroom_title || '', breakTime, teacherOnBreak.id)) {
+            return false
+          }
+        }
+        return true
+      }
+
+      // Ratio not maintained - cannot leave classroom
       return false
     }
 
@@ -471,8 +642,9 @@ export async function POST(request: NextRequest) {
         if (isInfantRoom && !isInfantQualified(sub)) continue
 
         // CRITICAL: Check if this teacher can substitute
-        // Only directors, floaters, same-classroom teachers, or freed playground teachers can substitute
-        if (!canTeacherSubstitute(sub, teacherOnBreak, breakTime)) continue
+        // Directors, floaters, same-classroom teachers, freed playground teachers,
+        // OR teachers whose classroom still has good ratio can substitute
+        if (!canTeacherSubstitute(sub, teacherOnBreak, breakTime, breakDuration)) continue
 
         // Found a valid substitute - record the assignment
         recordSubstituteAssignment(sub.id, breakTime, breakEndTime)
