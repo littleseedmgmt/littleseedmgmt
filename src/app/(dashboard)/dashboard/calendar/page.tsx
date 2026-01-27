@@ -343,7 +343,11 @@ export default function CalendarPage() {
   // Run optimization for all schools (both regular and minimal)
   const runOptimization = async () => {
     const schoolsToOptimize = currentSchool ? [currentSchool] : schools
-    if (schoolsToOptimize.length === 0) return
+    console.log('[Optimize] runOptimization called, schools:', schoolsToOptimize.length)
+    if (schoolsToOptimize.length === 0) {
+      console.log('[Optimize] No schools to optimize, returning')
+      return
+    }
 
     setOptimizing(true)
     const results = new Map<string, OptimizationResult>()
@@ -351,8 +355,10 @@ export default function CalendarPage() {
 
     try {
       const dateStr = formatDate(currentDate)
+      console.log('[Optimize] Date being used:', dateStr)
 
       await Promise.all(schoolsToOptimize.map(async (school) => {
+        console.log(`[Optimize] Starting optimization for school: ${school.name} (${school.id})`)
         try {
           // Fetch both regular and minimal optimization in parallel
           const [regularRes, minimalRes] = await Promise.all([
@@ -368,25 +374,45 @@ export default function CalendarPage() {
             })
           ])
 
+          console.log(`[Optimize] ${school.name} - Regular API status: ${regularRes.status}, Minimal API status: ${minimalRes.status}`)
+
           if (regularRes.ok) {
             const data = await regularRes.json()
+            console.log(`[Optimize] ${school.name} - Regular result:`, {
+              total_students: data.total_students,
+              available_teachers: data.available_teachers,
+              teachers_needed: data.teachers_needed,
+              breaks_count: data.breaks?.length
+            })
             results.set(school.id, data)
+          } else {
+            const errorText = await regularRes.text()
+            console.error(`[Optimize] ${school.name} - Regular API error:`, errorText)
           }
           if (minimalRes.ok) {
             const data = await minimalRes.json()
+            console.log(`[Optimize] ${school.name} - Minimal result:`, {
+              current_teachers: data.current_teachers,
+              minimal_teachers_needed: data.minimal_teachers_needed
+            })
             minResults.set(school.id, data)
+          } else {
+            const errorText = await minimalRes.text()
+            console.error(`[Optimize] ${school.name} - Minimal API error:`, errorText)
           }
         } catch (err) {
-          console.error(`Error optimizing for school ${school.id}:`, err)
+          console.error(`[Optimize] Error optimizing for school ${school.id}:`, err)
         }
       }))
 
+      console.log('[Optimize] All optimizations complete. Results count:', results.size, 'MinResults count:', minResults.size)
       setOptimizationResults(results)
       setMinimalResults(minResults)
     } catch (error) {
-      console.error('Error running optimization:', error)
+      console.error('[Optimize] Error running optimization:', error)
     } finally {
       setOptimizing(false)
+      console.log('[Optimize] Optimization finished')
     }
   }
 

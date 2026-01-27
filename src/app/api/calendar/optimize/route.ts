@@ -186,6 +186,14 @@ export async function POST(request: NextRequest) {
       student_counts?: { age_group: string; count: number }[]
     } | null
 
+    // DEBUG: Log director override data
+    console.log('[Optimize] Date requested:', date)
+    console.log('[Optimize] Director daily summary found:', dailySummary ? 'YES' : 'NO')
+    if (dailySummary) {
+      console.log('[Optimize] Teacher absences:', dailySummary.teacher_absences)
+      console.log('[Optimize] Student counts:', dailySummary.student_counts)
+    }
+
     // Get set of teacher IDs who are out on PTO for this date
     const teachersOnPTO = new Set(ptoRecords.map(p => p.teacher_id))
 
@@ -193,6 +201,7 @@ export async function POST(request: NextRequest) {
     const absentTeacherNames = new Set(
       (dailySummary?.teacher_absences || []).map(name => name.toLowerCase().trim())
     )
+    console.log('[Optimize] Absent teacher names (lowercase):', Array.from(absentTeacherNames))
 
     // Filter out teachers who are on PTO OR marked absent in daily summary
     const teachers = allTeachers.filter(t => {
@@ -204,6 +213,8 @@ export async function POST(request: NextRequest) {
       if (absentTeacherNames.has(firstName) || absentTeacherNames.has(fullName)) return false
       return true
     })
+    console.log('[Optimize] All teachers count:', allTeachers.length, 'After filtering:', teachers.length)
+    console.log('[Optimize] Filtered teacher names:', teachers.map(t => t.first_name))
 
 
     // Get ratio settings
