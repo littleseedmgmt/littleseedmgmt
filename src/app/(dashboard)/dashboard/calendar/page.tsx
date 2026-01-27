@@ -281,7 +281,13 @@ export default function CalendarPage() {
     return name
   }
 
-  const formatDate = (date: Date) => date.toISOString().split('T')[0]
+  // Use local date, not UTC (toISOString converts to UTC which causes off-by-one errors)
+  const formatDate = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
 
   const formatTime = (time: string) => {
     // Convert "HH:MM:SS" or "HH:MM" to display format like "8:30"
