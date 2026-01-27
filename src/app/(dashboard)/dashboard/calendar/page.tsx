@@ -379,11 +379,17 @@ export default function CalendarPage() {
           if (regularRes.ok) {
             const data = await regularRes.json()
             console.log(`[Optimize] ${school.name} - Regular result:`, {
-              total_students: data.total_students,
-              available_teachers: data.available_teachers,
-              teachers_needed: data.teachers_needed,
-              breaks_count: data.breaks?.length
+              total_students_present: data.coverage_summary?.total_students_present,
+              total_teachers: data.coverage_summary?.total_teachers,
+              teachers_needed_peak: data.coverage_summary?.teachers_needed_peak,
+              teachers_needed_nap: data.coverage_summary?.teachers_needed_nap,
+              breaks_count: data.breaks?.length,
+              alerts: data.alerts
             })
+            // Log debug info from server
+            if (data._debug) {
+              console.log(`[Optimize] ${school.name} - DEBUG INFO:`, data._debug)
+            }
             results.set(school.id, data)
           } else {
             const errorText = await regularRes.text()

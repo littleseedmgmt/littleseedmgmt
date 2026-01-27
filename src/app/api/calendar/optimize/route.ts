@@ -1001,6 +1001,15 @@ export async function POST(request: NextRequest) {
         teachers_needed_peak: peakTeachersNeeded,
         teachers_needed_nap: napTeachersNeeded,
         total_students_present: presentStudents.length
+      },
+      // Debug info - remove after testing
+      _debug: {
+        director_override_found: !!dailySummary,
+        teacher_absences: dailySummary?.teacher_absences || [],
+        student_counts_from_director: dailySummary?.student_counts || null,
+        all_teachers_count: allTeachers.length,
+        filtered_teachers_count: teachers.length,
+        filtered_teachers: teachers.map(t => t.first_name)
       }
     }
 
