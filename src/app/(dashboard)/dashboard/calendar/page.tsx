@@ -434,7 +434,22 @@ export default function CalendarPage() {
     if (optimizationResults.size === 0) return schedules
 
     return schedules.map(schedule => {
-      const updatedStaff = schedule.staff.map(staffSchedule => {
+      const result = optimizationResults.get(schedule.school.id)
+
+      // Get absent teacher names from optimization result (director override)
+      const absentTeacherNames = new Set(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ((result as any)?._debug?.teacher_absences || []).map((name: string) => name.toLowerCase().trim())
+      )
+
+      // Filter out absent teachers from display
+      const filteredStaff = schedule.staff.filter(staffSchedule => {
+        const firstName = staffSchedule.teacher.first_name.toLowerCase().trim()
+        const fullName = `${staffSchedule.teacher.first_name} ${staffSchedule.teacher.last_name}`.toLowerCase().trim()
+        return !absentTeacherNames.has(firstName) && !absentTeacherNames.has(fullName)
+      })
+
+      const updatedStaff = filteredStaff.map(staffSchedule => {
         const optimizedBreak = getOptimizedBreaks(schedule.school.id, staffSchedule.teacher.id)
 
         if (!optimizedBreak) return staffSchedule
