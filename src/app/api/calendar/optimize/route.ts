@@ -71,6 +71,15 @@ interface OptimizationResult {
     teachers_needed_nap: number
     total_students_present: number  // Students marked present for the day
   }
+  // Debug info - remove after testing
+  _debug?: {
+    director_override_found: boolean
+    teacher_absences: string[]
+    student_counts_from_director: { age_group: string; count: number }[] | null
+    all_teachers_count: number
+    filtered_teachers_count: number
+    filtered_teachers: string[]
+  }
 }
 
 // Helper: Convert time string to minutes since midnight
