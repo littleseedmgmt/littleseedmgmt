@@ -937,6 +937,8 @@ export default function CalendarPage() {
                   key={schedule.school.id}
                   schedule={schedule}
                   coverageSummary={optimizationResults.get(schedule.school.id)?.coverage_summary}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  absentTeachers={(optimizationResults.get(schedule.school.id) as any)?._debug?.teacher_absences || []}
                 />
               ))}
             </div>
@@ -1001,7 +1003,8 @@ export default function CalendarPage() {
 // Timeline view - clean table layout with equal-width columns for readability
 function SchoolTimelineCard({
   schedule,
-  coverageSummary
+  coverageSummary,
+  absentTeachers = []
 }: {
   schedule: SchoolDaySchedule
   coverageSummary?: {
@@ -1010,6 +1013,7 @@ function SchoolTimelineCard({
     teachers_needed_nap: number
     total_students_present?: number
   }
+  absentTeachers?: string[]
 }) {
   const getShortName = (name: string) => {
     if (name === 'Peter Pan Mariner Square') return 'Mariner Square'
@@ -1078,6 +1082,12 @@ function SchoolTimelineCard({
             </div>
           )}
         </div>
+        {/* Absent teachers indicator */}
+        {absentTeachers.length > 0 && (
+          <div className="mt-1 text-xs text-gray-500">
+            <span className="text-red-500">Out today:</span> {absentTeachers.join(', ')}
+          </div>
+        )}
       </div>
 
       {/* Schedule Table */}
