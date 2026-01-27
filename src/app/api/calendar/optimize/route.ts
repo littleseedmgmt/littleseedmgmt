@@ -161,20 +161,29 @@ export async function POST(request: NextRequest) {
 
     // Fetch remaining data in parallel (all array queries)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [teachersRes, classroomsRes, studentsRes, attendanceRes, settingsRes] = await Promise.all([
+    const [teachersRes, classroomsRes, studentsRes, attendanceRes, settingsRes, ptoRes] = await Promise.all([
       supabase.from('teachers').select('*').eq('school_id', school_id).eq('status', 'active'),
       supabase.from('classrooms').select('*').eq('school_id', school_id),
       supabase.from('students').select('*').eq('school_id', school_id).eq('status', 'enrolled'),
       supabase.from('attendance').select('*').eq('school_id', school_id).eq('date', date).eq('status', 'present'),
-      (supabase as any).from('school_settings').select('*').or(`school_id.is.null,school_id.eq.${school_id}`)
+      (supabase as any).from('school_settings').select('*').or(`school_id.is.null,school_id.eq.${school_id}`),
+      // Fetch approved PTO requests that cover the selected date
+      supabase.from('pto_requests').select('teacher_id').eq('school_id', school_id).eq('status', 'approved').lte('start_date', date).gte('end_date', date)
     ])
 
-    const teachers = (teachersRes.data || []) as Teacher[]
+    const allTeachers = (teachersRes.data || []) as Teacher[]
     const classrooms = (classroomsRes.data || []) as Classroom[]
     const students = (studentsRes.data || []) as Student[]
     const attendance = (attendanceRes.data || []) as { student_id: string }[]
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const settings = (settingsRes.data || []) as { setting_key: string; setting_value: any }[]
+    const ptoRecords = (ptoRes.data || []) as { teacher_id: string }[]
+
+    // Get set of teacher IDs who are out on PTO for this date
+    const teachersOnPTO = new Set(ptoRecords.map(p => p.teacher_id))
+
+    // Filter out teachers who are on PTO
+    const teachers = allTeachers.filter(t => !teachersOnPTO.has(t.id))
 
 
     // Get ratio settings
