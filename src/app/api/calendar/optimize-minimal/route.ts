@@ -326,10 +326,17 @@ export async function POST(request: NextRequest) {
       warnings.push('No enrolled students found for this school')
     }
 
-    // Get working teachers (exclude directors)
+    // Get working teachers (exclude directors for schedule display)
     const workingTeachers = teachers.filter(t =>
       t.role !== 'director' &&
       t.role !== 'assistant_director' &&
+      t.regular_shift_start &&
+      t.regular_shift_end
+    )
+
+    // Directors count towards available staff (they can help with coverage)
+    const directors = teachers.filter(t =>
+      (t.role === 'director' || t.role === 'assistant_director') &&
       t.regular_shift_start &&
       t.regular_shift_end
     )
@@ -886,7 +893,7 @@ export async function POST(request: NextRequest) {
       date,
       school_id,
       school_name: school.name,
-      current_teachers: workingTeachers.length,
+      current_teachers: workingTeachers.length + directors.length,
       minimal_teachers_needed: actualMinimal,
       potential_savings: actualSavings,
       essential_teachers: essentialTeachers,
