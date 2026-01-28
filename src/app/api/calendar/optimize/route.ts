@@ -852,44 +852,63 @@ export async function POST(request: NextRequest) {
         ? timeToMinutes(teacher.lunch_break_end)
         : (lunchStart ? lunchStart + 60 : null)
 
-      // Calculate midpoint for splitting breaks (before/after lunch or just middle of shift)
-      const midpoint = lunchStart || Math.floor((shiftStart + shiftEnd) / 2)
+      // Calculate IDEAL break times at the midpoint of each work period
+      // This spaces breaks evenly through the day, not clustered near lunch
+      let idealBreak1: number
+      let idealBreak2: number
 
-      // Find best break1 slot (first half of shift, before lunch if exists)
-      let break1Time = shiftStart + 120 // Default: 2 hours after shift start
+      if (lunchStart && lunchEnd) {
+        // With lunch: break1 = middle of morning, break2 = middle of afternoon
+        const morningWorkDuration = lunchStart - shiftStart
+        idealBreak1 = shiftStart + Math.floor(morningWorkDuration / 2)
+
+        const afternoonWorkDuration = shiftEnd - lunchEnd
+        idealBreak2 = lunchEnd + Math.floor(afternoonWorkDuration / 2)
+      } else {
+        // No lunch: split shift into thirds
+        const totalWork = shiftEnd - shiftStart
+        idealBreak1 = shiftStart + Math.floor(totalWork / 3)
+        idealBreak2 = shiftStart + Math.floor((totalWork * 2) / 3)
+      }
+
+      // Find the best slot closest to ideal break1 time
+      let break1Time = idealBreak1
+      let bestBreak1Distance = Infinity
       for (const slot of breakSlots) {
-        const beforeLunch = lunchStart ? slot.end < lunchStart - 10 : slot.end < midpoint
-        if (slot.start >= shiftStart + 60 && beforeLunch) {
-          // Prefer nap time slots, and slots not heavily used
+        // Must be within shift and before lunch (with buffer)
+        const beforeLunch = lunchStart ? slot.end <= lunchStart - 20 : true
+        if (slot.start >= shiftStart + 30 && slot.end <= shiftEnd && beforeLunch) {
           const slotUsage = usedSlots.get(slot.start)?.length || 0
-          if (slot.isNapTime && slotUsage < 2) {
-            break1Time = slot.start
-            break
-          }
-          if (slotUsage < 2) {
-            break1Time = slot.start
+          if (slotUsage < 3) { // Allow some overlap
+            const distance = Math.abs(slot.start - idealBreak1)
+            if (distance < bestBreak1Distance) {
+              bestBreak1Distance = distance
+              break1Time = slot.start
+            }
           }
         }
       }
 
-      // Find best break2 slot (second half of shift, after lunch if exists)
-      const afterLunchStart = lunchEnd || midpoint
-      let break2Time = afterLunchStart + 90 // Default: 1.5 hours after lunch/midpoint
+      // Find the best slot closest to ideal break2 time
+      let break2Time = idealBreak2
+      let bestBreak2Distance = Infinity
       for (const slot of breakSlots) {
-        if (slot.start >= afterLunchStart + 60 && slot.end <= shiftEnd - 30) {
+        // Must be after lunch (with buffer) and before shift end
+        const afterLunch = lunchEnd ? slot.start >= lunchEnd + 30 : true
+        if (afterLunch && slot.end <= shiftEnd - 20) {
           const slotUsage = usedSlots.get(slot.start)?.length || 0
-          if (slot.isNapTime && slotUsage < 2) {
-            break2Time = slot.start
-            break
-          }
-          if (slotUsage < 2) {
-            break2Time = slot.start
+          if (slotUsage < 3) {
+            const distance = Math.abs(slot.start - idealBreak2)
+            if (distance < bestBreak2Distance) {
+              bestBreak2Distance = distance
+              break2Time = slot.start
+            }
           }
         }
       }
 
-      // Make sure break2 is after break1
-      if (break2Time <= break1Time + 30) {
+      // Ensure minimum gap between breaks
+      if (break2Time <= break1Time + 60) {
         break2Time = Math.min(break1Time + 120, shiftEnd - 40)
       }
 
