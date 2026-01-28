@@ -133,6 +133,7 @@ interface StaffDaySchedule {
 interface SchoolDaySchedule {
   school: School
   staff: StaffDaySchedule[]
+  classrooms: Classroom[]
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -655,14 +656,16 @@ export default function CalendarPage() {
 
             return {
               school,
-              staff: staffSchedules
+              staff: staffSchedules,
+              classrooms
             }
           } catch (err) {
             console.error(`Error fetching schedule for school ${school.id}:`, err)
             // Return empty schedule for this school on error
             return {
               school,
-              staff: []
+              staff: [],
+              classrooms: []
             }
           }
         })
@@ -1252,20 +1255,22 @@ function SchoolClassroomView({
     return name
   }
 
-  // Get all unique classrooms from the schedule
-  const classroomsSet = new Set<string>()
-  for (const staffSchedule of schedule.staff) {
-    for (const block of staffSchedule.blocks) {
-      if (block.classroom_name && block.type === 'work') {
-        classroomsSet.add(block.classroom_name)
-      }
-    }
-    // Also add teacher's assigned classroom
-    if (staffSchedule.teacher.classroom_title) {
-      classroomsSet.add(staffSchedule.teacher.classroom_title)
-    }
+  // Age group order for sorting (youngest to oldest)
+  const ageGroupOrder: Record<string, number> = {
+    'infant': 1,
+    'toddler': 2,
+    'twos': 3,
+    'threes': 4,
+    'preschool': 5,
+    'pre_k': 6
   }
-  const classrooms = Array.from(classroomsSet).sort()
+
+  // Use actual classrooms from database, sorted by age group
+  const classrooms = [...schedule.classrooms].sort((a, b) => {
+    const orderA = ageGroupOrder[a.age_group] || 99
+    const orderB = ageGroupOrder[b.age_group] || 99
+    return orderA - orderB
+  })
 
   // Define time slots (hourly from 7am to 6pm)
   const timeSlots: { hour: number; label: string }[] = []
@@ -1281,28 +1286,10 @@ function SchoolClassroomView({
     return hours
   }
 
-  // Map age groups to classrooms (rough mapping based on common naming)
-  const getAgeGroupForClassroom = (classroomName: string): string | null => {
-    const name = classroomName.toLowerCase()
-    if (name.includes('infant')) return 'infant'
-    if (name.includes('toddler')) return 'toddler'
-    if (name.includes('2') || name.includes('two')) return 'twos'
-    if (name.includes('3') || name.includes('three')) return 'threes'
-    if (name.includes('4') || name.includes('four') || name.includes('pre-k') || name.includes('prek')) return 'pre_k'
-    if (name.includes('preschool')) return 'preschool'
-    // Common classroom names
-    if (name.includes('bunny') || name.includes('bunnies')) return 'twos'
-    if (name.includes('bear')) return 'preschool'
-    if (name.includes('squirrel')) return 'threes'
-    return null
-  }
-
-  // Get student count for a classroom
-  const getStudentCount = (classroomName: string): number | null => {
+  // Get student count for a classroom using age group from database
+  const getStudentCount = (classroom: Classroom): number | null => {
     if (!studentCountsByAgeGroup || studentCountsByAgeGroup.length === 0) return null
-    const ageGroup = getAgeGroupForClassroom(classroomName)
-    if (!ageGroup) return null
-    const match = studentCountsByAgeGroup.find(s => s.age_group === ageGroup)
+    const match = studentCountsByAgeGroup.find(s => s.age_group === classroom.age_group)
     return match?.count ?? null
   }
 
@@ -1431,7 +1418,7 @@ function SchoolClassroomView({
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="w-32 min-w-[128px] px-3 py-2 text-left text-sm font-semibold text-gray-700 border-r border-gray-200">
+              <th className="w-40 min-w-[160px] px-3 py-2 text-left text-sm font-semibold text-gray-700 border-r border-gray-200">
                 Classroom
               </th>
               {timeSlots.map(slot => (
@@ -1449,12 +1436,12 @@ function SchoolClassroomView({
               const studentCount = getStudentCount(classroom)
               return (
                 <tr
-                  key={classroom}
+                  key={classroom.id}
                   className={classroomIdx > 0 ? 'border-t border-gray-200' : ''}
                 >
                   {/* Classroom Name with student count */}
-                  <td className="w-32 min-w-[128px] px-3 py-3 border-r border-gray-200 bg-gray-50 align-top">
-                    <div className="font-bold text-gray-900 text-sm">{classroom}</div>
+                  <td className="w-40 min-w-[160px] px-3 py-3 border-r border-gray-200 bg-gray-50 align-top">
+                    <div className="font-bold text-gray-900 text-sm">{classroom.name}</div>
                     {studentCount !== null && (
                       <div className="text-xs text-purple-600 font-medium mt-1">
                         {studentCount} students
@@ -1464,8 +1451,8 @@ function SchoolClassroomView({
 
                   {/* Time slot cells */}
                   {timeSlots.map(slot => {
-                    const teachers = getTeachersAtHour(classroom, slot.hour)
-                    const breaks = getBreakInfo(classroom, slot.hour)
+                    const teachers = getTeachersAtHour(classroom.name, slot.hour)
+                    const breaks = getBreakInfo(classroom.name, slot.hour)
 
                     return (
                       <td
