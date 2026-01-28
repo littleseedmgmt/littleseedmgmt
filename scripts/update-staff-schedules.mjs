@@ -1,23 +1,23 @@
-import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
+#!/usr/bin/env node
+// Script to update staff schedules in the database
+// Run with: node scripts/update-staff-schedules.mjs
 
-// Allow in development OR test mode
-const isAllowed = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_ENV_MODE === 'test'
+import { createClient } from '@supabase/supabase-js'
+import dotenv from 'dotenv'
 
-// Staff schedule data - updated 2026-01-28
-interface StaffSchedule {
-  first_name: string
-  last_name: string
-  school_name: string
-  shift_start: string
-  shift_end: string
-  lunch_start: string | null
-  lunch_end: string | null
-  classroom_title?: string | null
-  role?: string
+dotenv.config({ path: '.env.local' })
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
+  process.exit(1)
 }
 
-const staffSchedules: StaffSchedule[] = [
+const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+const staffSchedules = [
   // Peter Pan Mariner Square
   { first_name: 'Julie', last_name: 'DeMauri', school_name: 'Peter Pan Mariner Square', shift_start: '08:30', shift_end: '17:30', lunch_start: '14:30', lunch_end: '15:30' },
   { first_name: 'Shannon', last_name: 'Atthowe', school_name: 'Peter Pan Mariner Square', shift_start: '07:30', shift_end: '17:00', lunch_start: '12:00', lunch_end: '13:30' },
@@ -58,160 +58,73 @@ const staffSchedules: StaffSchedule[] = [
   { first_name: 'Jennie', last_name: 'Mendoza', school_name: 'Peter Pan Harbor Bay', shift_start: '08:30', shift_end: '17:30', lunch_start: '13:00', lunch_end: '14:00', classroom_title: 'Dragonflies' },
 ]
 
-// POST /api/dev/migrate - Apply pending migrations
-export async function POST() {
-  if (!isAllowed) {
-    return NextResponse.json({ error: 'Only available in development or test mode' }, { status: 403 })
+async function main() {
+  console.log('Fetching schools...')
+  const { data: schools, error: schoolsError } = await supabase
+    .from('schools')
+    .select('id, name')
+
+  if (schoolsError) {
+    console.error('Error fetching schools:', schoolsError)
+    process.exit(1)
   }
 
-  try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+  const schoolMap = new Map(schools.map(s => [s.name, s.id]))
+  console.log('Schools found:', schools.map(s => s.name).join(', '))
 
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  let updated = 0
+  let failed = 0
+  const notFound = []
+
+  for (const staff of staffSchedules) {
+    const schoolId = schoolMap.get(staff.school_name)
+    if (!schoolId) {
+      console.error(`School not found: ${staff.school_name}`)
+      failed++
+      continue
     }
 
-    const results: string[] = []
-
-    // Migration 0: Update all staff schedules (2026-01-28)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: schools } = await (supabase as any)
-      .from('schools')
-      .select('id, name')
-
-    const schoolMap = new Map(schools?.map((s: { id: string; name: string }) => [s.name, s.id]) || [])
-
-    let staffUpdated = 0
-    let staffFailed = 0
-    for (const staff of staffSchedules) {
-      const schoolId = schoolMap.get(staff.school_name)
-      if (!schoolId) {
-        results.push(`School not found: ${staff.school_name}`)
-        staffFailed++
-        continue
-      }
-
-      const updateData: Record<string, string | null> = {
-        regular_shift_start: staff.shift_start,
-        regular_shift_end: staff.shift_end,
-        lunch_break_start: staff.lunch_start,
-        lunch_break_end: staff.lunch_end,
-      }
-      if (staff.classroom_title !== undefined) {
-        updateData.classroom_title = staff.classroom_title
-      }
-      if (staff.role) {
-        updateData.role = staff.role
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (supabase as any)
-        .from('teachers')
-        .update(updateData)
-        .eq('first_name', staff.first_name)
-        .eq('last_name', staff.last_name)
-        .eq('school_id', schoolId)
-
-      if (error) {
-        results.push(`Failed to update ${staff.first_name} ${staff.last_name}: ${error.message}`)
-        staffFailed++
-      } else {
-        staffUpdated++
-      }
+    const updateData = {
+      regular_shift_start: staff.shift_start,
+      regular_shift_end: staff.shift_end,
+      lunch_break_start: staff.lunch_start,
+      lunch_break_end: staff.lunch_end,
     }
-    results.push(`Staff schedules: ${staffUpdated} updated, ${staffFailed} failed`)
 
-    // Migration 1: Update Tam to floater with 7:45 start time (legacy - now handled above)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: tamError } = await (supabase as any)
+    if (staff.classroom_title !== undefined) {
+      updateData.classroom_title = staff.classroom_title
+    }
+    if (staff.role) {
+      updateData.role = staff.role
+    }
+
+    const { data, error } = await supabase
       .from('teachers')
-      .update({
-        role: 'floater',
-        classroom_title: 'anywhere',
-        regular_shift_start: '07:45'
-      })
-      .eq('first_name', 'Tam')
-      .eq('last_name', 'Tran')
+      .update(updateData)
+      .eq('first_name', staff.first_name)
+      .eq('last_name', staff.last_name)
+      .eq('school_id', schoolId)
+      .select()
 
-    if (tamError) {
-      results.push(`Tam update failed: ${tamError.message}`)
+    if (error) {
+      console.error(`Failed to update ${staff.first_name} ${staff.last_name}:`, error.message)
+      failed++
+    } else if (!data || data.length === 0) {
+      console.warn(`Teacher not found: ${staff.first_name} ${staff.last_name} at ${staff.school_name}`)
+      notFound.push(`${staff.first_name} ${staff.last_name}`)
+      failed++
     } else {
-      results.push('Tam updated to floater, shift starts 7:45')
+      console.log(`Updated: ${staff.first_name} ${staff.last_name} - ${staff.shift_start}-${staff.shift_end}`)
+      updated++
     }
+  }
 
-    // Migration 2: Add playground_times setting if not exists
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: existingPlayground } = await (supabase as any)
-      .from('school_settings')
-      .select('id')
-      .eq('setting_key', 'playground_times')
-      .is('school_id', null)
-      .single()
-
-    if (!existingPlayground) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: playgroundError } = await (supabase as any)
-        .from('school_settings')
-        .insert({
-          school_id: null,
-          setting_key: 'playground_times',
-          setting_value: {
-            morning: { start: '09:30', end: '11:00', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] },
-            afternoon: { start: '15:30', end: '16:30', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] }
-          },
-          description: 'Playground/outdoor times when classrooms with same ratio can be combined.'
-        })
-
-      if (playgroundError) {
-        results.push(`Playground times failed: ${playgroundError.message}`)
-      } else {
-        results.push('Playground times setting added')
-      }
-    } else {
-      results.push('Playground times setting already exists')
-    }
-
-    // Migration 3: Add circle_times setting if not exists
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: existingCircle } = await (supabase as any)
-      .from('school_settings')
-      .select('id')
-      .eq('setting_key', 'circle_times')
-      .is('school_id', null)
-      .single()
-
-    if (!existingCircle) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: circleError } = await (supabase as any)
-        .from('school_settings')
-        .insert({
-          school_id: null,
-          setting_key: 'circle_times',
-          setting_value: [
-            { start: '09:15', end: '09:30', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] },
-            { start: '11:45', end: '12:00', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] },
-            { start: '14:45', end: '15:00', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] }
-          ],
-          description: 'Circle time periods when preschoolers are combined for stories/activities.'
-        })
-
-      if (circleError) {
-        results.push(`Circle times failed: ${circleError.message}`)
-      } else {
-        results.push('Circle times setting added')
-      }
-    } else {
-      results.push('Circle times setting already exists')
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Migrations applied',
-      results
-    })
-  } catch (error) {
-    console.error('Migration error:', error)
-    return NextResponse.json({ error: String(error) }, { status: 500 })
+  console.log('\n=== Summary ===')
+  console.log(`Updated: ${updated}`)
+  console.log(`Failed: ${failed}`)
+  if (notFound.length > 0) {
+    console.log(`Not found: ${notFound.join(', ')}`)
   }
 }
+
+main().catch(console.error)

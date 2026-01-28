@@ -555,7 +555,55 @@ export async function POST(request: NextRequest) {
 
     // Optimize break times
     // Strategy: Stagger breaks so that at any given time, we maintain required ratios
-    // Prefer scheduling breaks during nap time when possible
+    // Only 1 teacher per "section" can take a break at a time.
+    //
+    // Section logic (based on real-world feedback):
+    // - Mariner Square has separate infant (5-6 teachers) and preschool (7-8 teachers) sections
+    //   that operate independently, so 1 infant + 1 preschool break can overlap
+    // - Little Seeds & Harbor Bay run tight: max 1 break at a time across the whole school
+    //
+    // We determine sections automatically: if both infant AND preschool groups each have
+    // >= 4 teachers, they are independent sections. Otherwise, the whole school is one section.
+
+    // Determine teacher sections based on classroom age group
+    const infantAgeGroups = new Set(['infant', 'toddler'])
+    const getTeacherSection = (teacher: Teacher): string => {
+      if (!teacher.classroom_title) return 'preschool' // floaters default to preschool section
+      const classroom = classrooms.find(c => classroomNamesMatch(teacher.classroom_title, c.name))
+      if (classroom && infantAgeGroups.has(classroom.age_group)) return 'infant'
+      return 'preschool'
+    }
+
+    // Helper: flexible classroom name matching (same logic as calendar page)
+    const classroomNamesMatch = (teacherClassroom: string | null, dbClassroomName: string): boolean => {
+      if (!teacherClassroom) return false
+      if (teacherClassroom === dbClassroomName) return true
+      const teacherLower = teacherClassroom.toLowerCase().trim()
+      const dbLower = dbClassroomName.toLowerCase().trim()
+      if (dbLower.includes(teacherLower) || teacherLower.includes(dbLower)) return true
+      if (dbLower.startsWith(teacherLower) || teacherLower.startsWith(dbLower)) return true
+      const parenMatch = dbLower.match(/\(([^)]+)\)/)
+      if (parenMatch) {
+        const insideParens = parenMatch[1].trim()
+        if (insideParens === teacherLower || insideParens.includes(teacherLower) || teacherLower.includes(insideParens)) return true
+      }
+      return false
+    }
+
+    // Count teachers per section to decide if sections are independent
+    const infantTeachers = workingTeachers.filter(t => getTeacherSection(t) === 'infant')
+    const preschoolTeachers = workingTeachers.filter(t => getTeacherSection(t) === 'preschool')
+    const hasIndependentSections = infantTeachers.length >= 4 && preschoolTeachers.length >= 4
+
+    console.log('[Optimize] Sections:', hasIndependentSections ? 'INDEPENDENT' : 'SINGLE',
+      `(infant: ${infantTeachers.length}, preschool: ${preschoolTeachers.length})`)
+
+    // Get the effective section key for a teacher (used for slot tracking)
+    // If sections aren't independent, everyone shares the same "all" section
+    const getEffectiveSection = (teacher: Teacher): string => {
+      if (!hasIndependentSections) return 'all'
+      return getTeacherSection(teacher)
+    }
 
     const breakSlots: { start: number; end: number; isNapTime: boolean }[] = []
 
@@ -573,8 +621,9 @@ export async function POST(request: NextRequest) {
     // Assign breaks to each teacher
     const breakAssignments = new Map<string, { break1: number; break2: number }>()
 
-    // Track which slots are used to stagger breaks
-    const usedSlots = new Map<number, string[]>() // slot start time -> teacher ids
+    // Track which slots are used per section to stagger breaks
+    // Key: "section:slotStartTime", Value: teacher ids using that slot
+    const usedSlotsBySection = new Map<string, string[]>()
 
     // Track substitute assignments to prevent double-booking
     // Maps substitute ID -> array of { start, end } time ranges they're covering
@@ -868,15 +917,20 @@ export async function POST(request: NextRequest) {
         idealBreak2 = shiftStart + Math.floor((totalWork * 2) / 3)
       }
 
+      // Determine this teacher's section for break staggering
+      const teacherSection = getEffectiveSection(teacher)
+
       // Find the best slot closest to ideal break1 time
+      // Only 1 teacher per section can use the same time slot
       let break1Time = idealBreak1
       let bestBreak1Distance = Infinity
       for (const slot of breakSlots) {
         // Must be within shift and before lunch (with buffer)
         const beforeLunch = lunchStart ? slot.end <= lunchStart - 20 : true
         if (slot.start >= shiftStart + 30 && slot.end <= shiftEnd && beforeLunch) {
-          const slotUsage = usedSlots.get(slot.start)?.length || 0
-          if (slotUsage < 3) { // Allow some overlap
+          const sectionKey = `${teacherSection}:${slot.start}`
+          const slotUsage = usedSlotsBySection.get(sectionKey)?.length || 0
+          if (slotUsage < 1) { // Max 1 teacher per section per time slot
             const distance = Math.abs(slot.start - idealBreak1)
             if (distance < bestBreak1Distance) {
               bestBreak1Distance = distance
@@ -893,8 +947,9 @@ export async function POST(request: NextRequest) {
         // Must be after lunch (with buffer) and before shift end
         const afterLunch = lunchEnd ? slot.start >= lunchEnd + 30 : true
         if (afterLunch && slot.end <= shiftEnd - 20) {
-          const slotUsage = usedSlots.get(slot.start)?.length || 0
-          if (slotUsage < 3) {
+          const sectionKey = `${teacherSection}:${slot.start}`
+          const slotUsage = usedSlotsBySection.get(sectionKey)?.length || 0
+          if (slotUsage < 1) { // Max 1 teacher per section per time slot
             const distance = Math.abs(slot.start - idealBreak2)
             if (distance < bestBreak2Distance) {
               bestBreak2Distance = distance
@@ -909,14 +964,16 @@ export async function POST(request: NextRequest) {
         break2Time = Math.min(break1Time + 120, shiftEnd - 40)
       }
 
-      // Track slot usage
-      const break1Users = usedSlots.get(break1Time) || []
+      // Track slot usage per section
+      const break1Key = `${teacherSection}:${break1Time}`
+      const break1Users = usedSlotsBySection.get(break1Key) || []
       break1Users.push(teacher.id)
-      usedSlots.set(break1Time, break1Users)
+      usedSlotsBySection.set(break1Key, break1Users)
 
-      const break2Users = usedSlots.get(break2Time) || []
+      const break2Key = `${teacherSection}:${break2Time}`
+      const break2Users = usedSlotsBySection.get(break2Key) || []
       break2Users.push(teacher.id)
-      usedSlots.set(break2Time, break2Users)
+      usedSlotsBySection.set(break2Key, break2Users)
 
       breakAssignments.set(teacher.id, { break1: break1Time, break2: break2Time })
     }
