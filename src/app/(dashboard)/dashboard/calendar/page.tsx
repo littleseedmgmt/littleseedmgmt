@@ -1315,6 +1315,9 @@ function SchoolClassroomView({
     const teacherLower = teacherClassroom.toLowerCase().trim()
     const dbLower = dbClassroomName.toLowerCase().trim()
 
+    // Check if one contains the other (simplest check)
+    if (dbLower.includes(teacherLower) || teacherLower.includes(dbLower)) return true
+
     // Check if one starts with the other
     if (dbLower.startsWith(teacherLower) || teacherLower.startsWith(dbLower)) return true
 
@@ -1328,11 +1331,6 @@ function SchoolClassroomView({
         return true
       }
     }
-
-    // Check if db classroom name (before parens) matches teacher classroom
-    // e.g., "Tigers 2s" should match "Tigers (2 yr)"
-    const dbBeforeParens = dbLower.split('(')[0].trim()
-    const teacherBeforeParens = teacherLower.split('(')[0].trim()
 
     // Extract base name (just the word part, before any numbers, parentheses, or age designations)
     // "Bunnies 2s" -> "bunnies", "Bunnies (2yr)" -> "bunnies"
