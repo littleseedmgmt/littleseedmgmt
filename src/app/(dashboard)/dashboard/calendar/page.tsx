@@ -16,6 +16,7 @@ interface Teacher {
   regular_shift_end: string | null
   lunch_break_start: string | null
   lunch_break_end: string | null
+  qualifications: string | null
 }
 
 interface Classroom {
@@ -1147,8 +1148,14 @@ function SchoolTimelineCard({
                 className={staffIdx > 0 ? 'border-t-2 border-gray-300' : ''}
               >
                 {/* Staff Name - Fixed width */}
-                <td className="w-24 min-w-[96px] px-3 py-3 font-bold text-gray-900 border-r-2 border-gray-300 bg-gray-50 align-top text-sm">
-                  {staffSchedule.teacher.first_name}
+                <td className="w-28 min-w-[112px] px-3 py-3 border-r-2 border-gray-300 bg-gray-50 align-top text-sm">
+                  <div className="font-bold text-gray-900">{staffSchedule.teacher.first_name}</div>
+                  {staffSchedule.teacher.qualifications?.toLowerCase().includes('infant') && (
+                    <div className="text-xs text-cyan-600 font-medium">Infant-qualified</div>
+                  )}
+                  {staffSchedule.teacher.classroom_title && (
+                    <div className="text-xs text-gray-500">{staffSchedule.teacher.classroom_title}</div>
+                  )}
                 </td>
 
                 {/* Time Blocks - Equal width columns */}
