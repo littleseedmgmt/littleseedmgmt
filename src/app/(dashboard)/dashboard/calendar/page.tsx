@@ -1323,7 +1323,7 @@ function SchoolClassroomView({
     const extractBaseName = (name: string): string => {
       return name.toLowerCase()
         .split('(')[0]           // Remove parentheses part
-        .replace(/\d+[-\s]?\d*/g, '') // Remove numbers and ranges like "2s", "4-5", "3s"
+        .replace(/\d+[-\s]?\d*s?/g, '') // Remove numbers, ranges, and trailing 's' like "2s", "4-5", "3s"
         .replace(/\s*(yr|year|yrs|years)\s*/gi, '') // Remove "yr", "year" etc.
         .trim()
     }
