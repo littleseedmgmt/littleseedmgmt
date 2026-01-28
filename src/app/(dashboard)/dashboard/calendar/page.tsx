@@ -1295,17 +1295,32 @@ function SchoolClassroomView({
 
   // Helper: Check if classroom names match (flexible matching)
   // Handles cases like "Squirrels" matching "Squirrels (1-2 yr)"
+  // Also handles "Bunnies 2s" matching "Bunnies (2yr)"
   const classroomNamesMatch = (teacherClassroom: string | null, dbClassroomName: string): boolean => {
     if (!teacherClassroom) return false
     // Exact match
     if (teacherClassroom === dbClassroomName) return true
-    // Check if one contains the other (e.g., "Squirrels" in "Squirrels (1-2 yr)")
+
     const teacherLower = teacherClassroom.toLowerCase()
     const dbLower = dbClassroomName.toLowerCase()
+
+    // Check if one starts with the other
     if (dbLower.startsWith(teacherLower) || teacherLower.startsWith(dbLower)) return true
-    // Check if base names match (before any parentheses)
-    const teacherBase = teacherClassroom.split('(')[0].trim().toLowerCase()
-    const dbBase = dbClassroomName.split('(')[0].trim().toLowerCase()
+
+    // Extract base name (just the word part, before any numbers, parentheses, or age designations)
+    // "Bunnies 2s" -> "bunnies", "Bunnies (2yr)" -> "bunnies"
+    // "Bears 4-5" -> "bears", "Bears (4-5 yr)" -> "bears"
+    const extractBaseName = (name: string): string => {
+      return name.toLowerCase()
+        .split('(')[0]           // Remove parentheses part
+        .replace(/\d+[-\s]?\d*/g, '') // Remove numbers and ranges like "2s", "4-5", "3s"
+        .replace(/\s*(yr|year|yrs|years)\s*/gi, '') // Remove "yr", "year" etc.
+        .trim()
+    }
+
+    const teacherBase = extractBaseName(teacherClassroom)
+    const dbBase = extractBaseName(dbClassroomName)
+
     return teacherBase === dbBase
   }
 
