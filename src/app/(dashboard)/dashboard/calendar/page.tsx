@@ -1293,6 +1293,22 @@ function SchoolClassroomView({
     return match?.count ?? null
   }
 
+  // Helper: Check if classroom names match (flexible matching)
+  // Handles cases like "Squirrels" matching "Squirrels (1-2 yr)"
+  const classroomNamesMatch = (teacherClassroom: string | null, dbClassroomName: string): boolean => {
+    if (!teacherClassroom) return false
+    // Exact match
+    if (teacherClassroom === dbClassroomName) return true
+    // Check if one contains the other (e.g., "Squirrels" in "Squirrels (1-2 yr)")
+    const teacherLower = teacherClassroom.toLowerCase()
+    const dbLower = dbClassroomName.toLowerCase()
+    if (dbLower.startsWith(teacherLower) || teacherLower.startsWith(dbLower)) return true
+    // Check if base names match (before any parentheses)
+    const teacherBase = teacherClassroom.split('(')[0].trim().toLowerCase()
+    const dbBase = dbClassroomName.split('(')[0].trim().toLowerCase()
+    return teacherBase === dbBase
+  }
+
   // Get teachers in a classroom at a specific hour
   const getTeachersAtHour = (classroomName: string, hour: number): { name: string; isOnBreak: boolean; coveringFrom?: string }[] => {
     const teachers: { name: string; isOnBreak: boolean; coveringFrom?: string }[] = []
@@ -1308,7 +1324,7 @@ function SchoolClassroomView({
 
         // Check if this block overlaps with the hour
         if (blockStart < hourEnd && blockEnd > hourStart) {
-          if (block.type === 'work' && block.classroom_name === classroomName) {
+          if (block.type === 'work' && classroomNamesMatch(block.classroom_name, classroomName)) {
             // Teacher is working in this classroom
             if (!teachers.find(t => t.name === teacherName)) {
               teachers.push({ name: teacherName, isOnBreak: false })
@@ -1318,7 +1334,7 @@ function SchoolClassroomView({
             const coveringTeacherName = block.substitute_name.replace(' helps', '')
             const teacherClassroom = staffSchedule.teacher.classroom_title
 
-            if (teacherClassroom === classroomName) {
+            if (classroomNamesMatch(teacherClassroom, classroomName)) {
               // The teacher on break is from this classroom, show their substitute
               if (!teachers.find(t => t.name === coveringTeacherName)) {
                 teachers.push({
@@ -1343,7 +1359,7 @@ function SchoolClassroomView({
     const hourEnd = (hour + 1) * 60
 
     for (const staffSchedule of schedule.staff) {
-      if (staffSchedule.teacher.classroom_title !== classroomName) continue
+      if (!classroomNamesMatch(staffSchedule.teacher.classroom_title, classroomName)) continue
 
       for (const block of staffSchedule.blocks) {
         if (block.type !== 'break' && block.type !== 'lunch') continue
