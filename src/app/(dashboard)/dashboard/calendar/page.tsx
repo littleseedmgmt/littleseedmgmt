@@ -484,7 +484,10 @@ export default function CalendarPage() {
 
       return {
         ...schedule,
-        staff: updatedStaff
+        // Sort staff alphabetically by first name
+        staff: updatedStaff.sort((a, b) =>
+          a.teacher.first_name.localeCompare(b.teacher.first_name)
+        )
       }
     })
   }
@@ -1770,7 +1773,7 @@ function MinimalScenarioCard({
         <div className="overflow-x-auto mb-6">
           <table className="w-full border-collapse">
             <tbody>
-              {result.essential_teachers.map((teacher) => (
+              {[...result.essential_teachers].sort((a, b) => a.teacher_name.localeCompare(b.teacher_name)).map((teacher) => (
                 <tr key={teacher.teacher_id} className="border-t border-gray-200">
                   <td className="w-32 min-w-[128px] px-3 py-3 font-bold text-gray-900 border-r border-gray-200 bg-green-50 align-top text-sm">
                     <div>{teacher.teacher_name.split(' ')[0]}</div>
