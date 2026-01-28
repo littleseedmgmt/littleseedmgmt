@@ -1306,20 +1306,38 @@ function SchoolClassroomView({
   // Helper: Check if classroom names match (flexible matching)
   // Handles cases like "Squirrels" matching "Squirrels (1-2 yr)"
   // Also handles "Bunnies 2s" matching "Bunnies (2yr)"
+  // Also handles "Upstairs Infant" matching "Caterpillars (Upstairs Infant)"
   const classroomNamesMatch = (teacherClassroom: string | null, dbClassroomName: string): boolean => {
     if (!teacherClassroom) return false
     // Exact match
     if (teacherClassroom === dbClassroomName) return true
 
-    const teacherLower = teacherClassroom.toLowerCase()
-    const dbLower = dbClassroomName.toLowerCase()
+    const teacherLower = teacherClassroom.toLowerCase().trim()
+    const dbLower = dbClassroomName.toLowerCase().trim()
 
     // Check if one starts with the other
     if (dbLower.startsWith(teacherLower) || teacherLower.startsWith(dbLower)) return true
 
+    // Check if teacher's classroom appears inside the parentheses of db name
+    // e.g., "Upstairs Infant" should match "Caterpillars (Upstairs Infant)"
+    // e.g., "Downstairs Infant" should match "Tadpoles (Downstairs Infant)"
+    const parenMatch = dbLower.match(/\(([^)]+)\)/)
+    if (parenMatch) {
+      const insideParens = parenMatch[1].trim()
+      if (insideParens === teacherLower || insideParens.includes(teacherLower) || teacherLower.includes(insideParens)) {
+        return true
+      }
+    }
+
+    // Check if db classroom name (before parens) matches teacher classroom
+    // e.g., "Tigers 2s" should match "Tigers (2 yr)"
+    const dbBeforeParens = dbLower.split('(')[0].trim()
+    const teacherBeforeParens = teacherLower.split('(')[0].trim()
+
     // Extract base name (just the word part, before any numbers, parentheses, or age designations)
     // "Bunnies 2s" -> "bunnies", "Bunnies (2yr)" -> "bunnies"
     // "Bears 4-5" -> "bears", "Bears (4-5 yr)" -> "bears"
+    // "Pre-K 4-5" -> "pre-k", "Soda Pop (4-5 yr)" -> "soda pop"
     const extractBaseName = (name: string): string => {
       return name.toLowerCase()
         .split('(')[0]           // Remove parentheses part
@@ -1331,7 +1349,18 @@ function SchoolClassroomView({
     const teacherBase = extractBaseName(teacherClassroom)
     const dbBase = extractBaseName(dbClassroomName)
 
-    return teacherBase === dbBase
+    if (teacherBase === dbBase) return true
+
+    // Special case: "Pre-K" variations should match "Soda Pop" type names
+    // This requires knowing the age group mapping - check if both refer to 4-5 year olds
+    const is4to5 = (name: string): boolean => {
+      const lower = name.toLowerCase()
+      return lower.includes('pre-k') || lower.includes('prek') || lower.includes('4-5') ||
+             lower.includes('4 yr') || lower.includes('5 yr') || lower.includes('soda pop')
+    }
+    if (is4to5(teacherClassroom) && is4to5(dbClassroomName)) return true
+
+    return false
   }
 
   // Get teachers in a classroom at a specific hour
