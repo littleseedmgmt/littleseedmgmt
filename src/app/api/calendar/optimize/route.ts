@@ -25,6 +25,8 @@ interface Classroom {
   id: string
   name: string
   age_group: string
+  nap_start: string | null
+  nap_end: string | null
 }
 
 interface RatioSettings {
@@ -96,24 +98,16 @@ function minutesToTime(minutes: number): string {
 }
 
 // Helper: Check if time is during nap period for a classroom
-function isDuringNap(timeMinutes: number, students: Student[], classroomId: string): boolean {
-  const classroomStudents = students.filter(s => s.classroom_id === classroomId)
-  if (classroomStudents.length === 0) return false
-
-  // Check if majority of students in this classroom are napping
-  let nappingCount = 0
-  for (const student of classroomStudents) {
-    if (student.nap_start && student.nap_end) {
-      const napStart = timeToMinutes(student.nap_start)
-      const napEnd = timeToMinutes(student.nap_end)
-      if (timeMinutes >= napStart && timeMinutes < napEnd) {
-        nappingCount++
-      }
-    }
+// Uses CLASSROOM-LEVEL nap schedules (e.g., "all 2-year-olds nap 12:00-14:30")
+// NOT individual student nap times
+function isDuringNapForClassroom(timeMinutes: number, classroom: Classroom): boolean {
+  // Check classroom-level nap schedule
+  if (classroom.nap_start && classroom.nap_end) {
+    const napStart = timeToMinutes(classroom.nap_start)
+    const napEnd = timeToMinutes(classroom.nap_end)
+    return timeMinutes >= napStart && timeMinutes < napEnd
   }
-
-  // If more than 70% are napping, consider it nap time for ratio purposes
-  return nappingCount / classroomStudents.length > 0.7
+  return false
 }
 
 // Helper: Check if a teacher is infant-qualified
@@ -315,7 +309,7 @@ export async function POST(request: NextRequest) {
         const studentCount = (studentsByClassroom.get(classroom.id) || []).length
         if (studentCount === 0) continue
 
-        const isNapTime = isDuringNap(timeMinutes, presentStudents, classroom.id)
+        const isNapTime = isDuringNapForClassroom(timeMinutes, classroom)
         const ratio = getRatioForAgeGroup(ageGroup, isNapTime)
 
         const existing = classroomsByRatio.get(ratio) || []
@@ -358,7 +352,7 @@ export async function POST(request: NextRequest) {
         const studentCount = (studentsByClassroom.get(classroom.id) || []).length
         if (studentCount === 0) continue
 
-        const isNapTime = isDuringNap(timeMinutes, presentStudents, classroom.id)
+        const isNapTime = isDuringNapForClassroom(timeMinutes, classroom)
         const ratio = getRatioForAgeGroup(ageGroup, isNapTime)
 
         // Find teachers assigned to this classroom
@@ -530,15 +524,17 @@ export async function POST(request: NextRequest) {
       if (studentCount === 0) continue
 
       const isInfantRoom = classroom.age_group === 'infant' || classroom.age_group === 'toddler'
-      const isNapAtPeak = isDuringNap(peakTime, presentStudents, classroom.id)
-      const isNapAt1pm = isDuringNap(napTime, presentStudents, classroom.id)
+      const isNapAtPeak = isDuringNapForClassroom(peakTime, classroom)
+      const isNapAt1pm = isDuringNapForClassroom(napTime, classroom)
 
       peakTeachersNeeded += getRequiredTeachers(classroom, studentCount, isNapAtPeak, normalRatios, napRatios)
       napTeachersNeeded += getRequiredTeachers(classroom, studentCount, isNapAt1pm, normalRatios, napRatios)
     }
 
     // Check for staffing surplus or shortage
-    const totalTeachers = workingTeachers.length
+    // Include directors in the available count since they can help with coverage
+    const directors = teachers.filter(t => t.role === 'director' || t.role === 'assistant_director')
+    const totalTeachers = workingTeachers.length + directors.length
 
     if (totalTeachers > peakTeachersNeeded + 2) {
       alerts.push({
@@ -565,7 +561,8 @@ export async function POST(request: NextRequest) {
 
     // Generate possible break slots (every 15 minutes)
     for (let time = 9 * 60; time < 17 * 60; time += 15) {
-      const isNap = isDuringNap(time, presentStudents, classrooms[0]?.id || '')
+      // Check if any classroom is during nap time
+      const isNap = classrooms.some(c => isDuringNapForClassroom(time, c))
       breakSlots.push({
         start: time,
         end: time + 10,
@@ -677,7 +674,7 @@ export async function POST(request: NextRequest) {
       const studentCount = classroomStudents.length
       if (studentCount === 0) return 0
 
-      const isNapTime = isDuringNap(timeMinutes, presentStudents, classroom.id)
+      const isNapTime = isDuringNapForClassroom(timeMinutes, classroom)
       return getRequiredTeachers(classroom, studentCount, isNapTime, normalRatios, napRatios)
     }
 

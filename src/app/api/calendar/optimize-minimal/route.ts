@@ -25,6 +25,8 @@ interface Classroom {
   id: string
   name: string
   age_group: string
+  nap_start: string | null
+  nap_end: string | null
 }
 
 interface RatioSettings {
@@ -89,26 +91,18 @@ function isInfantQualified(teacher: Teacher): boolean {
 }
 
 // Helper: Check if time is during nap period for a classroom
+// Uses CLASSROOM-LEVEL nap schedules (e.g., "all 2-year-olds nap 12:00-14:30")
 function isDuringNapForClassroom(
   timeMinutes: number,
-  students: Student[],
-  classroomId: string
+  classroom: Classroom
 ): boolean {
-  const classroomStudents = students.filter(s => s.classroom_id === classroomId)
-  if (classroomStudents.length === 0) return false
-
-  let nappingCount = 0
-  for (const student of classroomStudents) {
-    if (student.nap_start && student.nap_end) {
-      const napStart = timeToMinutes(student.nap_start)
-      const napEnd = timeToMinutes(student.nap_end)
-      if (timeMinutes >= napStart && timeMinutes < napEnd) {
-        nappingCount++
-      }
-    }
+  // Check classroom-level nap schedule
+  if (classroom.nap_start && classroom.nap_end) {
+    const napStart = timeToMinutes(classroom.nap_start)
+    const napEnd = timeToMinutes(classroom.nap_end)
+    return timeMinutes >= napStart && timeMinutes < napEnd
   }
-
-  return nappingCount / classroomStudents.length > 0.7
+  return false
 }
 
 // POST /api/calendar/optimize-minimal - Calculate minimal staff scenario
@@ -413,7 +407,7 @@ export async function POST(request: NextRequest) {
       const classroomStudents = studentsByClassroom.get(classroom.id) || []
       const studentCount = classroomStudents.length
       if (studentCount === 0) return 0
-      const isNapTime = isDuringNapForClassroom(timeMinutes, presentStudents, classroom.id)
+      const isNapTime = isDuringNapForClassroom(timeMinutes, classroom)
       const ageGroup = classroom.age_group as keyof RatioSettings
       const ratio = isNapTime ? (napRatios[ageGroup] || 12) : (normalRatios[ageGroup] || 12)
       return Math.ceil(studentCount / ratio)
@@ -439,7 +433,7 @@ export async function POST(request: NextRequest) {
         const studentCount = (studentsByClassroom.get(classroom.id) || []).length
         if (studentCount === 0) continue
 
-        const isNapTime = isDuringNapForClassroom(timeMinutes, presentStudents, classroom.id)
+        const isNapTime = isDuringNapForClassroom(timeMinutes, classroom)
         const ratio = getRatioForAgeGroup(ageGroup, isNapTime)
 
         // Find teachers assigned to this classroom (only essential ones in minimal scenario)
@@ -689,7 +683,7 @@ export async function POST(request: NextRequest) {
         const studentCount = studentsByClassroom.get(classroom.id)?.length || 0
         if (studentCount === 0) continue
 
-        const isNap = isDuringNapForClassroom(time, presentStudents, classroom.id)
+        const isNap = isDuringNapForClassroom(time, classroom)
         const ageGroup = classroom.age_group as keyof RatioSettings
         const ratio = isNap ? (napRatios[ageGroup] || 12) : (normalRatios[ageGroup] || 12)
         const required = Math.ceil(studentCount / ratio)
