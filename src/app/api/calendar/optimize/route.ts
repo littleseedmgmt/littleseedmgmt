@@ -426,6 +426,47 @@ export async function POST(request: NextRequest) {
       return freedTeachers
     }
 
+    // Helper: Get list of teachers who are "freed" during nap time consolidation
+    // When multiple preschool classrooms nap simultaneously, kids consolidate into fewer nap rooms
+    // This frees up teachers who can then cover lunches for others
+    const getFreedTeachersDuringNap = (timeMinutes: number): Set<string> => {
+      const freedTeachers = new Set<string>()
+
+      // Only preschool classrooms consolidate for nap — infants have separate nap handling
+      const nappingClassrooms: { classroom: Classroom; studentCount: number; teachers: Teacher[] }[] = []
+
+      for (const classroom of classrooms) {
+        const ageGroup = classroom.age_group
+        if (infantAgeGroups.has(ageGroup)) continue // Skip infant rooms
+        if (!isDuringNapForClassroom(timeMinutes, classroom)) continue
+
+        const studentCount = (studentsByClassroom.get(classroom.id) || []).length
+        if (studentCount === 0) continue
+
+        const classroomTeachers = workingTeachers.filter(t => classroomNamesMatch(t.classroom_title, classroom.name))
+        nappingClassrooms.push({ classroom, studentCount, teachers: classroomTeachers })
+      }
+
+      if (nappingClassrooms.length <= 1) return freedTeachers
+
+      // Calculate teachers needed if nap rooms are consolidated
+      const totalNappingStudents = nappingClassrooms.reduce((sum, r) => sum + r.studentCount, 0)
+      const napRatio = napRatios.twos || 24
+      const napTeachersNeeded = Math.ceil(totalNappingStudents / napRatio)
+
+      const allNapTeachers = nappingClassrooms.flatMap(r => r.teachers)
+
+      // Teachers beyond what's needed for nap rooms are freed for coverage
+      if (allNapTeachers.length > napTeachersNeeded) {
+        const freedCount = allNapTeachers.length - napTeachersNeeded
+        for (let i = allNapTeachers.length - freedCount; i < allNapTeachers.length; i++) {
+          freedTeachers.add(allNapTeachers[i].id)
+        }
+      }
+
+      return freedTeachers
+    }
+
     // Get present students count
     // Priority: 1) Director override (student_counts), 2) Attendance records, 3) All enrolled
     let presentStudents: Student[] = []
@@ -588,6 +629,18 @@ export async function POST(request: NextRequest) {
         if (insideParens === teacherLower || insideParens.includes(teacherLower) || teacherLower.includes(insideParens)) return true
       }
       return false
+    }
+
+    // Helper: Get the coverage section of a substitute teacher
+    // This determines WHICH teachers they can cover for (infant vs preschool)
+    // Directors can cover anyone ('any'), floaters based on qualifications
+    const getSubCoverageSection = (sub: Teacher): string => {
+      if (sub.role === 'director' || sub.role === 'assistant_director') return 'any'
+      if (!sub.classroom_title || sub.classroom_title === 'anywhere') {
+        // Floater without classroom: section based on qualifications
+        return isInfantQualified(sub) ? 'infant' : 'preschool'
+      }
+      return getTeacherSection(sub)
     }
 
     // Count teachers per section to decide if sections are independent
@@ -798,12 +851,13 @@ export async function POST(request: NextRequest) {
         return true
       }
 
-      // PLAYGROUND/CIRCLE TIME OPTIMIZATION: During these times, teachers who are "freed"
+      // PLAYGROUND/CIRCLE/NAP TIME OPTIMIZATION: During these times, teachers who are "freed"
       // due to combined ratios can substitute for others even if their own room needs them normally
       const freedPlaygroundTeachers = getFreedTeachersDuringPlayground(breakTime)
       const freedCircleTimeTeachers = getFreedTeachersDuringCircleTime(breakTime)
+      const freedNapTeachers = getFreedTeachersDuringNap(breakTime)
 
-      if (freedPlaygroundTeachers.has(substitute.id) || freedCircleTimeTeachers.has(substitute.id)) {
+      if (freedPlaygroundTeachers.has(substitute.id) || freedCircleTimeTeachers.has(substitute.id) || freedNapTeachers.has(substitute.id)) {
         // Still check infant rule
         const targetClassroom = classrooms.find(c => c.name === teacherOnBreak.classroom_title)
         const isInfantRoom = targetClassroom?.age_group === 'infant' || targetClassroom?.age_group === 'toddler'
@@ -820,7 +874,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Helper: Find a substitute teacher for a given break time
-    // includingDirectors: set to true for lunch breaks where directors can help
+    // Uses tiered priority: floaters first, same-section teachers second, directors last
+    // Respects qualification boundaries: infant-qualified covers infant, preschool covers preschool
+    // Directors are exempt from boundaries and can cover anyone
     // breakDuration: duration in minutes (10 for short breaks, 60 for lunch)
     const findSubstitute = (
       teacherOnBreak: Teacher,
@@ -830,55 +886,67 @@ export async function POST(request: NextRequest) {
       includingDirectors: boolean = false
     ): string | null => {
       // Get the classroom of the teacher on break
-      const teacherClassroom = classrooms.find(c => c.name === teacherOnBreak.classroom_title)
+      const teacherClassroom = classrooms.find(c => classroomNamesMatch(teacherOnBreak.classroom_title, c.name))
       const isInfantRoom = teacherClassroom?.age_group === 'infant' || teacherClassroom?.age_group === 'toddler'
+      const breakEndTime = breakTime + breakDuration
+
+      // Determine which section the teacher on break belongs to
+      const onBreakSection = getTeacherSection(teacherOnBreak)
+
+      // Common validation for any substitute candidate
+      const isValidCandidate = (sub: Teacher): boolean => {
+        if (sub.id === teacherOnBreak.id) return false
+        if (!isTeacherWorking(sub, breakTime)) return false
+        if (doesTeacherBreakOverlap(sub, breakTime, breakEndTime)) return false
+        if (isSubstituteAssigned(sub.id, breakTime, breakEndTime)) return false
+        if (isInfantRoom && !isInfantQualified(sub)) return false
+        if (!canTeacherSubstitute(sub, teacherOnBreak, breakTime, breakDuration)) return false
+        return true
+      }
+
+      // Qualification boundary check: don't cross infant/preschool boundary
+      // Directors are exempt (they can cover anyone)
+      const passesQualificationBoundary = (sub: Teacher): boolean => {
+        if (sub.role === 'director' || sub.role === 'assistant_director') return true
+        const subSection = getSubCoverageSection(sub)
+        if (onBreakSection === 'infant' && subSection !== 'infant') return false
+        if (onBreakSection === 'preschool' && subSection !== 'preschool') return false
+        return true
+      }
 
       // Use all potential subs (including directors) or just working teachers
       const candidates = includingDirectors ? allPotentialSubs : workingTeachers
 
-      const breakEndTime = breakTime + breakDuration
-
-      // Find available teachers who can cover
-      for (const sub of candidates) {
-        if (sub.id === teacherOnBreak.id) continue // Can't substitute yourself
-        if (!isTeacherWorking(sub, breakTime)) continue // Not working at this time
-
-        // Check if sub has ANY break/lunch that overlaps with the coverage period
-        if (doesTeacherBreakOverlap(sub, breakTime, breakEndTime)) continue
-
-        // Check if already assigned to cover someone else during this time
-        if (isSubstituteAssigned(sub.id, breakTime, breakEndTime)) continue
-
-        // Check infant qualification if needed
-        if (isInfantRoom && !isInfantQualified(sub)) continue
-
-        // CRITICAL: Check if this teacher can substitute
-        // Directors, floaters, same-classroom teachers, freed playground teachers,
-        // OR teachers whose classroom still has good ratio can substitute
-        if (!canTeacherSubstitute(sub, teacherOnBreak, breakTime, breakDuration)) continue
-
-        // Found a valid substitute - record the assignment
+      // TIER 1: Floaters (first choice — this is their primary job)
+      const floaters = candidates.filter(s =>
+        s.role === 'floater' || (!s.classroom_title && s.role !== 'director' && s.role !== 'assistant_director')
+      )
+      for (const sub of floaters) {
+        if (!passesQualificationBoundary(sub)) continue
+        if (!isValidCandidate(sub)) continue
         recordSubstituteAssignment(sub.id, breakTime, breakEndTime)
-
         return `${sub.first_name} helps`
       }
 
-      // If no regular substitute found and we haven't already tried directors, try them as fallback
-      if (!includingDirectors) {
-        const directors = allPotentialSubs.filter(t =>
-          t.role === 'director' || t.role === 'assistant_director'
-        )
-        for (const director of directors) {
-          if (director.id === teacherOnBreak.id) continue
-          if (!isTeacherWorking(director, breakTime)) continue
-          if (doesTeacherBreakOverlap(director, breakTime, breakEndTime)) continue
-          if (isSubstituteAssigned(director.id, breakTime, breakEndTime)) continue
-          if (isInfantRoom && !isInfantQualified(director)) continue
-          // Directors don't need classroom check - they can always help
+      // TIER 2: Regular teachers from the same section with spare classroom capacity
+      const regularTeachers = candidates.filter(s =>
+        s.role !== 'floater' && s.role !== 'director' && s.role !== 'assistant_director' && s.classroom_title
+      )
+      for (const sub of regularTeachers) {
+        if (!passesQualificationBoundary(sub)) continue
+        if (!isValidCandidate(sub)) continue
+        recordSubstituteAssignment(sub.id, breakTime, breakEndTime)
+        return `${sub.first_name} helps`
+      }
 
-          recordSubstituteAssignment(director.id, breakTime, breakEndTime)
-          return `${director.first_name} helps`
-        }
+      // TIER 3: Directors (last resort — they have operational responsibilities)
+      const directors = allPotentialSubs.filter(t =>
+        t.role === 'director' || t.role === 'assistant_director'
+      )
+      for (const director of directors) {
+        if (!isValidCandidate(director)) continue
+        recordSubstituteAssignment(director.id, breakTime, breakEndTime)
+        return `${director.first_name} helps`
       }
 
       return null // No substitute found
@@ -983,8 +1051,25 @@ export async function POST(request: NextRequest) {
       const assignment = breakAssignments.get(teacher.id)
       if (!assignment) continue
 
-      const break1Sub = findSubstitute(teacher, assignment.break1, 10, classrooms, false)
-      const break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, false)
+      // Check if this teacher is in a preschool classroom
+      // Preschool teachers don't need break substitutes during playground time
+      // because 2s, 3s, and 4s are combined outdoors with sufficient ratio coverage
+      const teacherClassroom = classrooms.find(c => classroomNamesMatch(teacher.classroom_title, c.name))
+      const isPreschoolRoom = teacherClassroom && !infantAgeGroups.has(teacherClassroom.age_group)
+
+      let break1Sub: string | null
+      if (isPreschoolRoom && isDuringPlayground(assignment.break1, teacherClassroom.age_group)) {
+        break1Sub = null // No substitute needed — playground coverage
+      } else {
+        break1Sub = findSubstitute(teacher, assignment.break1, 10, classrooms, false)
+      }
+
+      let break2Sub: string | null
+      if (isPreschoolRoom && isDuringPlayground(assignment.break2, teacherClassroom.age_group)) {
+        break2Sub = null // No substitute needed — playground coverage
+      } else {
+        break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, false)
+      }
 
       // Calculate lunch substitute if teacher has lunch break
       // Include directors as potential substitutes for lunch coverage
