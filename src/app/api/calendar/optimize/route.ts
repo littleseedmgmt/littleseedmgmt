@@ -929,9 +929,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Helper: Find a substitute teacher for a given break time
-    // Uses tiered priority: floaters first, same-section teachers second, directors last
-    // Respects qualification boundaries: infant-qualified covers infant, preschool covers preschool
-    // Directors are exempt from boundaries and can cover anyone
+    // Uses tiered priority:
+    //   TIER 0: Same-classroom colleague (during nap when ratio allows)
+    //   TIER 1: Floaters (their primary job)
+    //   TIER 2: Same-section teachers with spare capacity
+    //   TIER 3: Directors (last resort)
+    // Respects qualification boundaries: infant teachers stay in infant room, preschool covers preschool
+    // Directors and floaters are exempt from boundaries and can cover anyone
     // breakDuration: duration in minutes (10 for short breaks, 60 for lunch)
     const findSubstitute = (
       teacherOnBreak: Teacher,
@@ -948,21 +952,29 @@ export async function POST(request: NextRequest) {
       // Determine which section the teacher on break belongs to
       const onBreakSection = getTeacherSection(teacherOnBreak)
 
-      // Common validation for any substitute candidate
-      const isValidCandidate = (sub: Teacher): boolean => {
+      // Basic validation for any substitute candidate (doesn't check classroom capacity)
+      const isBasicValidCandidate = (sub: Teacher): boolean => {
         if (sub.id === teacherOnBreak.id) return false
         if (!isTeacherWorking(sub, breakTime)) return false
         if (doesTeacherBreakOverlap(sub, breakTime, breakEndTime)) return false
         if (isSubstituteAssigned(sub.id, breakTime, breakEndTime)) return false
         if (isInfantRoom && !isInfantQualified(sub)) return false
+        return true
+      }
+
+      // Full validation including classroom capacity check
+      const isValidCandidate = (sub: Teacher): boolean => {
+        if (!isBasicValidCandidate(sub)) return false
         if (!canTeacherSubstitute(sub, teacherOnBreak, breakTime, breakDuration)) return false
         return true
       }
 
       // Qualification boundary check: don't cross infant/preschool boundary
-      // Directors are exempt (they can cover anyone)
+      // Directors and floaters are exempt (they can cover anyone)
       const passesQualificationBoundary = (sub: Teacher): boolean => {
         if (sub.role === 'director' || sub.role === 'assistant_director') return true
+        // Floaters without classroom assignment can cover anyone
+        if (!sub.classroom_title) return true
         const subSection = getSubCoverageSection(sub)
         if (onBreakSection === 'infant' && subSection !== 'infant') return false
         if (onBreakSection === 'preschool' && subSection !== 'preschool') return false
@@ -972,18 +984,48 @@ export async function POST(request: NextRequest) {
       // Use all potential subs (including directors) or just working teachers
       const candidates = includingDirectors ? allPotentialSubs : workingTeachers
 
+      // TIER 0: Same-classroom colleague
+      // During nap time (1:24 ratio for 2+), one teacher can cover the other's lunch
+      // They don't need to "leave" their room - they're already there
+      if (teacherOnBreak.classroom_title && teacherClassroom) {
+        const isNapTime = isDuringNapForClassroom(breakTime, teacherClassroom)
+        if (isNapTime && !isInfantRoom) {
+          // Find colleagues in the same classroom
+          const sameRoomColleagues = candidates.filter(s =>
+            s.id !== teacherOnBreak.id &&
+            classroomNamesMatch(s.classroom_title, teacherOnBreak.classroom_title!)
+          )
+          for (const colleague of sameRoomColleagues) {
+            if (!isBasicValidCandidate(colleague)) continue
+            // During nap time, check if having one less teacher still meets ratio
+            const classroomStudents = studentsByClassroom.get(teacherClassroom.id) || []
+            const napRatio = napRatios[teacherClassroom.age_group as keyof RatioSettings] || 24
+            const requiredDuringNap = Math.ceil(classroomStudents.length / napRatio)
+            const currentInRoom = getClassroomTeacherCount(teacherOnBreak.classroom_title!, breakTime)
+            // If after one person takes break, there's still enough coverage
+            if (currentInRoom - 1 >= requiredDuringNap) {
+              recordSubstituteAssignment(colleague.id, breakTime, breakEndTime)
+              return `${colleague.first_name} covers`
+            }
+          }
+        }
+      }
+
       // TIER 1: Floaters (first choice — this is their primary job)
+      // Floaters can cover ANY section regardless of their qualifications
       const floaters = candidates.filter(s =>
         s.role === 'floater' || (!s.classroom_title && s.role !== 'director' && s.role !== 'assistant_director')
       )
       for (const sub of floaters) {
-        if (!passesQualificationBoundary(sub)) continue
-        if (!isValidCandidate(sub)) continue
+        // Floaters are exempt from boundary check but still need infant qualification for infant rooms
+        if (isInfantRoom && !isInfantQualified(sub)) continue
+        if (!isBasicValidCandidate(sub)) continue
         recordSubstituteAssignment(sub.id, breakTime, breakEndTime)
         return `${sub.first_name} helps`
       }
 
       // TIER 2: Regular teachers from the same section with spare classroom capacity
+      // IMPORTANT: Infant room teachers should NOT leave to cover preschool breaks
       const regularTeachers = candidates.filter(s =>
         s.role !== 'floater' && s.role !== 'director' && s.role !== 'assistant_director' && s.classroom_title
       )
@@ -999,7 +1041,7 @@ export async function POST(request: NextRequest) {
         t.role === 'director' || t.role === 'assistant_director'
       )
       for (const director of directors) {
-        if (!isValidCandidate(director)) continue
+        if (!isBasicValidCandidate(director)) continue
         recordSubstituteAssignment(director.id, breakTime, breakEndTime)
         return `${director.first_name} helps`
       }
