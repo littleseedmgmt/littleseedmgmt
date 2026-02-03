@@ -202,10 +202,22 @@ export async function POST(request: NextRequest) {
     // Build a map of schedule overrides from director's schedule_changes
     // This handles cases like "Tam comes in at 1" or "Christina leaves at 2pm"
     const scheduleOverrides = new Map<string, { startOverride?: number; endOverride?: number }>()
+    // Track teachers working at another school (e.g., "Aura at Mariner Square")
+    const teachersAtOtherSchool = new Set<string>()
+
     if (dailySummary?.schedule_changes) {
       for (const change of dailySummary.schedule_changes) {
         const name = change.name.toLowerCase().trim()
         const note = change.note.toLowerCase()
+
+        // Parse "at [other school]" - teacher is working elsewhere, exclude from this schedule
+        // Matches: "at Mariner Square", "at Little Seeds", "working at Harbor Bay", etc.
+        const atOtherSchoolMatch = note.match(/(?:^at\s+|working\s+at\s+|assigned\s+to\s+|helping\s+at\s+)([a-z\s]+)/i)
+        if (atOtherSchoolMatch) {
+          teachersAtOtherSchool.add(name)
+          console.log(`[Optimize] ${name} working at another location: ${atOtherSchoolMatch[1].trim()}`)
+          continue // Skip other parsing for this teacher
+        }
 
         // Parse "comes in at X" or "arrives at X" patterns
         const comesInMatch = note.match(/(?:comes?\s*in|arrives?|starts?)\s*(?:at\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i)
@@ -249,6 +261,10 @@ export async function POST(request: NextRequest) {
     const absentTeacherNames = new Set(
       (dailySummary?.teacher_absences || []).map(name => name.toLowerCase().trim())
     )
+    // Also add teachers working at other schools to absent list
+    for (const name of teachersAtOtherSchool) {
+      absentTeacherNames.add(name)
+    }
     console.log('[Optimize] Absent teacher names (lowercase):', Array.from(absentTeacherNames))
 
     // Filter out teachers who are on PTO OR marked absent in daily summary
@@ -959,6 +975,12 @@ export async function POST(request: NextRequest) {
         if (doesTeacherBreakOverlap(sub, breakTime, breakEndTime)) return false
         if (isSubstituteAssigned(sub.id, breakTime, breakEndTime)) return false
         if (isInfantRoom && !isInfantQualified(sub)) return false
+        // INFANT ROOM SPECIAL RULE: Same-room colleagues cannot cover each other's breaks
+        // because all infant teachers are needed to maintain ratio (1:4).
+        // They need an external person (director/floater) to come in.
+        if (isInfantRoom && teacherOnBreak.classroom_title && classroomNamesMatch(sub.classroom_title, teacherOnBreak.classroom_title)) {
+          return false
+        }
         return true
       }
 
