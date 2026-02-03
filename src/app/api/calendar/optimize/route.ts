@@ -1047,15 +1047,18 @@ export async function POST(request: NextRequest) {
       }
 
       // TIER 2: Regular teachers from the same section with spare classroom capacity
-      // IMPORTANT: Infant room teachers should NOT leave to cover preschool breaks
-      const regularTeachers = candidates.filter(s =>
-        s.role !== 'floater' && s.role !== 'director' && s.role !== 'assistant_director' && s.classroom_title
-      )
-      for (const sub of regularTeachers) {
-        if (!passesQualificationBoundary(sub)) continue
-        if (!isValidCandidate(sub)) continue
-        recordSubstituteAssignment(sub.id, breakTime, breakEndTime)
-        return `${sub.first_name} helps`
+      // SKIP for infant/toddler rooms - they should only be covered by directors (TIER 3)
+      // This prevents Pat (infant) from covering Shelly/Sherry (toddler) etc.
+      if (!isInfantRoom) {
+        const regularTeachers = candidates.filter(s =>
+          s.role !== 'floater' && s.role !== 'director' && s.role !== 'assistant_director' && s.classroom_title
+        )
+        for (const sub of regularTeachers) {
+          if (!passesQualificationBoundary(sub)) continue
+          if (!isValidCandidate(sub)) continue
+          recordSubstituteAssignment(sub.id, breakTime, breakEndTime)
+          return `${sub.first_name} helps`
+        }
       }
 
       // TIER 3: Directors (last resort — they have operational responsibilities)
@@ -1198,23 +1201,36 @@ export async function POST(request: NextRequest) {
         if (override.endOverride !== undefined) effectiveShiftEnd = override.endOverride
       }
 
-      // Check if this teacher is in a preschool classroom
-      // Preschool teachers (2s, 3s, 4s, pre-k) don't need substitutes for 10-minute breaks
-      // because these age groups combine throughout the day (playground, circle time, etc.)
-      // and there's always sufficient ratio coverage. Only infant teachers need substitutes.
+      // Check if this teacher needs break substitutes
+      // Rules:
+      // 1. Floaters (no classroom) don't need coverage - they're flexible
+      // 2. Preschool teachers (2s, 3s, 4s, pre-k) don't need coverage - kids combine outside
+      // 3. Infant/toddler teachers need coverage from directors only (not other teachers)
       const teacherClassroom = classrooms.find(c => classroomNamesMatch(teacher.classroom_title, c.name))
+      const isFloater = !teacher.classroom_title
       const isPreschoolRoom = teacherClassroom && !infantAgeGroups.has(teacherClassroom.age_group)
+      const isInfantOrToddlerRoom = teacherClassroom && infantAgeGroups.has(teacherClassroom.age_group)
 
       let break1Sub: string | null
-      if (isPreschoolRoom) {
+      if (isFloater) {
+        break1Sub = 'Flexible coverage' // Floaters don't need substitutes
+      } else if (isPreschoolRoom) {
         break1Sub = 'Kids outside, sufficient coverage' // Preschool rooms combine during breaks
+      } else if (isInfantOrToddlerRoom) {
+        // Infant/toddler breaks need director coverage only
+        break1Sub = findSubstitute(teacher, assignment.break1, 10, classrooms, true) // true = include directors
       } else {
         break1Sub = findSubstitute(teacher, assignment.break1, 10, classrooms, false)
       }
 
       let break2Sub: string | null
-      if (isPreschoolRoom) {
+      if (isFloater) {
+        break2Sub = 'Flexible coverage' // Floaters don't need substitutes
+      } else if (isPreschoolRoom) {
         break2Sub = 'Kids outside, sufficient coverage' // Preschool rooms combine during breaks
+      } else if (isInfantOrToddlerRoom) {
+        // Infant/toddler breaks need director coverage only
+        break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, true) // true = include directors
       } else {
         break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, false)
       }
