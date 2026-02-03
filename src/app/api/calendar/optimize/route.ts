@@ -1052,21 +1052,22 @@ export async function POST(request: NextRequest) {
       if (!assignment) continue
 
       // Check if this teacher is in a preschool classroom
-      // Preschool teachers don't need break substitutes during playground time
-      // because 2s, 3s, and 4s are combined outdoors with sufficient ratio coverage
+      // Preschool teachers (2s, 3s, 4s, pre-k) don't need substitutes for 10-minute breaks
+      // because these age groups combine throughout the day (playground, circle time, etc.)
+      // and there's always sufficient ratio coverage. Only infant teachers need substitutes.
       const teacherClassroom = classrooms.find(c => classroomNamesMatch(teacher.classroom_title, c.name))
       const isPreschoolRoom = teacherClassroom && !infantAgeGroups.has(teacherClassroom.age_group)
 
       let break1Sub: string | null
-      if (isPreschoolRoom && isDuringPlayground(assignment.break1, teacherClassroom.age_group)) {
-        break1Sub = null // No substitute needed — playground coverage
+      if (isPreschoolRoom) {
+        break1Sub = null // No substitute needed — preschool rooms have combined coverage
       } else {
         break1Sub = findSubstitute(teacher, assignment.break1, 10, classrooms, false)
       }
 
       let break2Sub: string | null
-      if (isPreschoolRoom && isDuringPlayground(assignment.break2, teacherClassroom.age_group)) {
-        break2Sub = null // No substitute needed — playground coverage
+      if (isPreschoolRoom) {
+        break2Sub = null // No substitute needed — preschool rooms have combined coverage
       } else {
         break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, false)
       }
