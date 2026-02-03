@@ -1185,14 +1185,14 @@ export async function POST(request: NextRequest) {
 
       let break1Sub: string | null
       if (isPreschoolRoom) {
-        break1Sub = null // No substitute needed — preschool rooms have combined coverage
+        break1Sub = 'Kids outside, sufficient coverage' // Preschool rooms combine during breaks
       } else {
         break1Sub = findSubstitute(teacher, assignment.break1, 10, classrooms, false)
       }
 
       let break2Sub: string | null
       if (isPreschoolRoom) {
-        break2Sub = null // No substitute needed — preschool rooms have combined coverage
+        break2Sub = 'Kids outside, sufficient coverage' // Preschool rooms combine during breaks
       } else {
         break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, false)
       }
