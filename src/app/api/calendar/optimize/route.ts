@@ -173,8 +173,8 @@ export async function POST(request: NextRequest) {
       (supabase as any).from('school_settings').select('*').or(`school_id.is.null,school_id.eq.${school_id}`),
       // Fetch approved PTO requests that cover the selected date
       supabase.from('pto_requests').select('teacher_id').eq('school_id', school_id).eq('status', 'approved').lte('start_date', date).gte('end_date', date),
-      // Fetch director's daily summary for teacher absences AND student counts
-      (supabase as any).from('director_daily_summaries').select('teacher_absences, student_counts').eq('school_id', school_id).eq('date', date).maybeSingle()
+      // Fetch director's daily summary for teacher absences, student counts, AND schedule changes
+      (supabase as any).from('director_daily_summaries').select('teacher_absences, student_counts, schedule_changes').eq('school_id', school_id).eq('date', date).maybeSingle()
     ])
 
     const allTeachers = (teachersRes.data || []) as Teacher[]
@@ -187,6 +187,7 @@ export async function POST(request: NextRequest) {
     const dailySummary = dailySummaryRes.data as {
       teacher_absences: string[]
       student_counts?: { age_group: string; count: number }[]
+      schedule_changes?: { name: string; note: string }[]
     } | null
 
     // DEBUG: Log director override data
@@ -195,6 +196,50 @@ export async function POST(request: NextRequest) {
     if (dailySummary) {
       console.log('[Optimize] Teacher absences:', dailySummary.teacher_absences)
       console.log('[Optimize] Student counts:', dailySummary.student_counts)
+      console.log('[Optimize] Schedule changes:', dailySummary.schedule_changes)
+    }
+
+    // Build a map of schedule overrides from director's schedule_changes
+    // This handles cases like "Tam comes in at 1" or "Christina leaves at 2pm"
+    const scheduleOverrides = new Map<string, { startOverride?: number; endOverride?: number }>()
+    if (dailySummary?.schedule_changes) {
+      for (const change of dailySummary.schedule_changes) {
+        const name = change.name.toLowerCase().trim()
+        const note = change.note.toLowerCase()
+
+        // Parse "comes in at X" or "arrives at X" patterns
+        const comesInMatch = note.match(/(?:comes?\s*in|arrives?|starts?)\s*(?:at\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i)
+        if (comesInMatch) {
+          let hour = parseInt(comesInMatch[1])
+          const minutes = comesInMatch[2] ? parseInt(comesInMatch[2]) : 0
+          const ampm = comesInMatch[3]?.toLowerCase()
+          // Handle PM times
+          if (ampm === 'pm' && hour < 12) hour += 12
+          if (ampm === 'am' && hour === 12) hour = 0
+          // If no am/pm specified and hour is 1-6, assume PM (afternoon arrival)
+          if (!ampm && hour >= 1 && hour <= 6) hour += 12
+          const override = scheduleOverrides.get(name) || {}
+          override.startOverride = hour * 60 + minutes
+          scheduleOverrides.set(name, override)
+          console.log(`[Optimize] Schedule override for ${name}: starts at ${hour}:${minutes.toString().padStart(2, '0')}`)
+        }
+
+        // Parse "leaves at X" or "goes home at X" patterns
+        const leavesMatch = note.match(/(?:leaves?|going\s*home|goes?\s*home|departs?|ends?)\s*(?:at\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i)
+        if (leavesMatch) {
+          let hour = parseInt(leavesMatch[1])
+          const minutes = leavesMatch[2] ? parseInt(leavesMatch[2]) : 0
+          const ampm = leavesMatch[3]?.toLowerCase()
+          if (ampm === 'pm' && hour < 12) hour += 12
+          if (ampm === 'am' && hour === 12) hour = 0
+          // If no am/pm specified and hour is 1-6, assume PM
+          if (!ampm && hour >= 1 && hour <= 6) hour += 12
+          const override = scheduleOverrides.get(name) || {}
+          override.endOverride = hour * 60 + minutes
+          scheduleOverrides.set(name, override)
+          console.log(`[Optimize] Schedule override for ${name}: ends at ${hour}:${minutes.toString().padStart(2, '0')}`)
+        }
+      }
     }
 
     // Get set of teacher IDs who are out on PTO for this date
@@ -683,10 +728,20 @@ export async function POST(request: NextRequest) {
     const substituteAssignments = new Map<string, { start: number; end: number }[]>()
 
     // Helper: Check if a teacher is working at a given time
+    // Respects schedule overrides from director's daily summary (e.g., "Tam comes in at 1")
     const isTeacherWorking = (teacher: Teacher, timeMinutes: number): boolean => {
       if (!teacher.regular_shift_start || !teacher.regular_shift_end) return false
-      const start = timeToMinutes(teacher.regular_shift_start)
-      const end = timeToMinutes(teacher.regular_shift_end)
+      let start = timeToMinutes(teacher.regular_shift_start)
+      let end = timeToMinutes(teacher.regular_shift_end)
+
+      // Check for schedule overrides from director's daily summary
+      const teacherNameLower = teacher.first_name.toLowerCase().trim()
+      const override = scheduleOverrides.get(teacherNameLower)
+      if (override) {
+        if (override.startOverride !== undefined) start = override.startOverride
+        if (override.endOverride !== undefined) end = override.endOverride
+      }
+
       return timeMinutes >= start && timeMinutes < end
     }
 
