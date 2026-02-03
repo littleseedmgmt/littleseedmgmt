@@ -1012,14 +1012,32 @@ export async function POST(request: NextRequest) {
         continue
       }
 
-      const shiftStart = timeToMinutes(teacher.regular_shift_start)
-      const shiftEnd = timeToMinutes(teacher.regular_shift_end)
+      // Get base shift times and apply schedule overrides (e.g., "Tam comes in at 1")
+      let shiftStart = timeToMinutes(teacher.regular_shift_start)
+      let shiftEnd = timeToMinutes(teacher.regular_shift_end)
+      const teacherNameLower = teacher.first_name.toLowerCase().trim()
+      const override = scheduleOverrides.get(teacherNameLower)
+      if (override) {
+        if (override.startOverride !== undefined) shiftStart = override.startOverride
+        if (override.endOverride !== undefined) shiftEnd = override.endOverride
+      }
 
-      // Get lunch times if available
-      const lunchStart = teacher.lunch_break_start ? timeToMinutes(teacher.lunch_break_start) : null
-      const lunchEnd = teacher.lunch_break_end
+      // Get lunch times if available, but skip if lunch is outside the effective shift
+      let lunchStart = teacher.lunch_break_start ? timeToMinutes(teacher.lunch_break_start) : null
+      let lunchEnd = teacher.lunch_break_end
         ? timeToMinutes(teacher.lunch_break_end)
         : (lunchStart ? lunchStart + 60 : null)
+
+      // If lunch ends before shift starts (due to late arrival override), skip lunch
+      if (lunchEnd && lunchEnd <= shiftStart) {
+        lunchStart = null
+        lunchEnd = null
+      }
+      // If lunch starts after shift ends (due to early departure override), skip lunch
+      if (lunchStart && lunchStart >= shiftEnd) {
+        lunchStart = null
+        lunchEnd = null
+      }
 
       // Calculate IDEAL break times at the midpoint of each work period
       // This spaces breaks evenly through the day, not clustered near lunch
@@ -1106,6 +1124,16 @@ export async function POST(request: NextRequest) {
       const assignment = breakAssignments.get(teacher.id)
       if (!assignment) continue
 
+      // Apply schedule overrides to determine effective shift times
+      const teacherNameLower = teacher.first_name.toLowerCase().trim()
+      const override = scheduleOverrides.get(teacherNameLower)
+      let effectiveShiftStart = teacher.regular_shift_start ? timeToMinutes(teacher.regular_shift_start) : 0
+      let effectiveShiftEnd = teacher.regular_shift_end ? timeToMinutes(teacher.regular_shift_end) : 24 * 60
+      if (override) {
+        if (override.startOverride !== undefined) effectiveShiftStart = override.startOverride
+        if (override.endOverride !== undefined) effectiveShiftEnd = override.endOverride
+      }
+
       // Check if this teacher is in a preschool classroom
       // Preschool teachers (2s, 3s, 4s, pre-k) don't need substitutes for 10-minute breaks
       // because these age groups combine throughout the day (playground, circle time, etc.)
@@ -1127,12 +1155,26 @@ export async function POST(request: NextRequest) {
         break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, false)
       }
 
-      // Calculate lunch substitute if teacher has lunch break
+      // Determine effective lunch times considering schedule overrides
+      // If lunch is outside the effective shift (due to late arrival/early departure), skip it
+      let effectiveLunchStart: string | null = teacher.lunch_break_start
+      let effectiveLunchEnd: string | null = teacher.lunch_break_end
+      if (effectiveLunchStart && effectiveLunchEnd) {
+        const lunchStartMins = timeToMinutes(effectiveLunchStart)
+        const lunchEndMins = timeToMinutes(effectiveLunchEnd)
+        // Skip lunch if it ends before shift starts or starts after shift ends
+        if (lunchEndMins <= effectiveShiftStart || lunchStartMins >= effectiveShiftEnd) {
+          effectiveLunchStart = null
+          effectiveLunchEnd = null
+        }
+      }
+
+      // Calculate lunch substitute if teacher has lunch break within their effective shift
       // Include directors as potential substitutes for lunch coverage
       let lunchSub: string | null = null
-      if (teacher.lunch_break_start && teacher.lunch_break_end) {
-        const lunchStart = timeToMinutes(teacher.lunch_break_start)
-        const lunchEnd = timeToMinutes(teacher.lunch_break_end)
+      if (effectiveLunchStart && effectiveLunchEnd) {
+        const lunchStart = timeToMinutes(effectiveLunchStart)
+        const lunchEnd = timeToMinutes(effectiveLunchEnd)
         const lunchDuration = lunchEnd - lunchStart
         lunchSub = findSubstitute(teacher, lunchStart, lunchDuration, classrooms, true)
       }
@@ -1146,8 +1188,8 @@ export async function POST(request: NextRequest) {
         break2_start: minutesToTime(assignment.break2),
         break2_end: minutesToTime(assignment.break2 + 10),
         break2_sub_name: break2Sub,
-        lunch_start: teacher.lunch_break_start,
-        lunch_end: teacher.lunch_break_end,
+        lunch_start: effectiveLunchStart,
+        lunch_end: effectiveLunchEnd,
         lunch_sub_name: lunchSub
       })
     }
