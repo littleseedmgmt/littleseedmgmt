@@ -36,12 +36,12 @@ Extract:
 
 IMPORTANT: ${directorName ? `The director sending this message is "${directorName}". If the message contains "I" referring to the director (e.g., "I leave early", "I'll be out", "I come in late"), replace "I" with "${directorName}" in the schedule_changes.` : 'If "I" is used without a name, use "Director" as the name.'}
 
-Age groups to recognize and normalize to these exact values:
-- "infant" for: infant, infants, babies, baby
+Age groups to recognize and normalize to these exact database values:
+- "infant" for: infant, infants, babies, baby, ladybugs
 - "toddler" for: toddler, toddlers
-- "twos" for: 2s, 2yr, 2 yr, 2yr old, 2-year-old, twos, two year old
-- "threes" for: 3s, 3yr, 3 yr, 3yr old, 3-year-old, threes, three year old
-- "fours" for: 4s, 4yr, 4 yr, 4yr old, 4-year-old, fours, four year old, pre-k, prek, preschool
+- "twos" for: 2s, 2yr, 2 yr, 2yr old, 2-year-old, twos, two year old, grasshopper, grasshoppers
+- "threes" for: 3s, 3yr, 3 yr, 3yr old, 3-year-old, threes, three year old, butterflies
+- "pre_k" for: 4s, 4yr, 4 yr, 4yr old, 4-year-old, fours, four year old, pre-k, prek, preschool, dragonflies
 
 For staffing:
 - "QT", "qualified", "qualified teacher" = qualified_teachers count

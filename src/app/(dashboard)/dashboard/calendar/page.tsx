@@ -1142,7 +1142,30 @@ function SchoolTimelineCard({
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <tbody>
-            {schedule.staff.map((staffSchedule, staffIdx) => (
+            {[...schedule.staff].sort((a, b) => {
+              // Sort by classroom age group: infant first, then toddler, twos, threes, pre_k
+              // Teachers without classroom (floaters) go last
+              const ageOrder: Record<string, number> = {
+                'infant': 1, 'toddler': 2, 'twos': 3, 'threes': 4, 'preschool': 5, 'pre_k': 6
+              }
+              const getClassroomOrder = (teacher: { classroom_title: string | null }) => {
+                if (!teacher.classroom_title) return 99 // Floaters go last
+                // Find matching classroom to get age_group
+                const classroom = schedule.classrooms.find(c => {
+                  if (!teacher.classroom_title) return false
+                  const t = teacher.classroom_title.toLowerCase().trim()
+                  const d = c.name.toLowerCase().trim()
+                  return t === d || d.includes(t) || t.includes(d)
+                })
+                if (!classroom) return 98 // Unknown classroom
+                return ageOrder[classroom.age_group] || 97
+              }
+              const orderA = getClassroomOrder(a.teacher)
+              const orderB = getClassroomOrder(b.teacher)
+              if (orderA !== orderB) return orderA - orderB
+              // Within same classroom, sort by name
+              return a.teacher.first_name.localeCompare(b.teacher.first_name)
+            }).map((staffSchedule, staffIdx) => (
               <tr
                 key={staffSchedule.teacher.id}
                 className={staffIdx > 0 ? 'border-t-2 border-gray-300' : ''}
