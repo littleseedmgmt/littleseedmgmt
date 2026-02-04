@@ -1277,9 +1277,24 @@ export async function POST(request: NextRequest) {
     // Save optimized breaks to the shifts table
     // This persists the optimization so it's available in future sessions
     for (const optimizedBreak of optimizedBreaks) {
-      // Find the teacher to get their regular shift times
+      // Find the teacher to get their shift times
       const teacher = workingTeachers.find(t => t.id === optimizedBreak.teacher_id)
       if (!teacher) continue
+
+      // Apply schedule overrides to get effective shift times
+      // This handles "Tam comes in at 1" type overrides
+      const teacherNameLower = teacher.first_name.toLowerCase().trim()
+      const override = scheduleOverrides.get(teacherNameLower)
+      let effectiveStartTime = teacher.regular_shift_start
+      let effectiveEndTime = teacher.regular_shift_end
+      if (override) {
+        if (override.startOverride !== undefined) {
+          effectiveStartTime = minutesToTime(override.startOverride)
+        }
+        if (override.endOverride !== undefined) {
+          effectiveEndTime = minutesToTime(override.endOverride)
+        }
+      }
 
       // Try to update existing shift record
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1292,13 +1307,17 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (existingShift) {
-        // Update existing shift with optimized breaks
+        // Update existing shift with optimized breaks AND effective times
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: updateError } = await (supabase as any)
           .from('shifts')
           .update({
+            start_time: effectiveStartTime,
+            end_time: effectiveEndTime,
             break1_start: optimizedBreak.break1_start,
             break1_end: optimizedBreak.break1_end,
+            lunch_start: optimizedBreak.lunch_start,
+            lunch_end: optimizedBreak.lunch_end,
             break2_start: optimizedBreak.break2_start,
             break2_end: optimizedBreak.break2_end,
           })
@@ -1308,7 +1327,7 @@ export async function POST(request: NextRequest) {
           console.error(`[Optimize] Error updating shift for teacher ${optimizedBreak.teacher_id}:`, updateError)
         }
       } else {
-        // Create new shift record with optimized breaks
+        // Create new shift record with optimized breaks AND effective times
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: insertError } = await (supabase as any)
           .from('shifts')
@@ -1316,12 +1335,12 @@ export async function POST(request: NextRequest) {
             school_id,
             teacher_id: optimizedBreak.teacher_id,
             date,
-            start_time: teacher.regular_shift_start,
-            end_time: teacher.regular_shift_end,
+            start_time: effectiveStartTime,
+            end_time: effectiveEndTime,
             break1_start: optimizedBreak.break1_start,
             break1_end: optimizedBreak.break1_end,
-            lunch_start: teacher.lunch_break_start,
-            lunch_end: teacher.lunch_break_end,
+            lunch_start: optimizedBreak.lunch_start,
+            lunch_end: optimizedBreak.lunch_end,
             break2_start: optimizedBreak.break2_start,
             break2_end: optimizedBreak.break2_end,
             status: 'scheduled',
