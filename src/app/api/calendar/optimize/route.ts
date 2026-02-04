@@ -750,7 +750,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Assign breaks to each teacher
-    const breakAssignments = new Map<string, { break1: number; break2: number }>()
+    const breakAssignments = new Map<string, { break1: number; break2: number | null }>()
 
     // Track which slots are used per section to stagger breaks
     // Key: "section:slotStartTime", Value: teacher ids using that slot
@@ -784,8 +784,8 @@ export async function POST(request: NextRequest) {
       if (!assignment) return false
       // Check break1
       if (timeMinutes >= assignment.break1 && timeMinutes < assignment.break1 + 10) return true
-      // Check break2
-      if (timeMinutes >= assignment.break2 && timeMinutes < assignment.break2 + 10) return true
+      // Check break2 (only if they have one)
+      if (assignment.break2 !== null && timeMinutes >= assignment.break2 && timeMinutes < assignment.break2 + 10) return true
       return false
     }
 
@@ -796,9 +796,11 @@ export async function POST(request: NextRequest) {
         // Check break1 (10 minutes)
         const break1End = assignment.break1 + 10
         if (startTime < break1End && assignment.break1 < endTime) return true
-        // Check break2 (10 minutes)
-        const break2End = assignment.break2 + 10
-        if (startTime < break2End && assignment.break2 < endTime) return true
+        // Check break2 (10 minutes) - only if they have one
+        if (assignment.break2 !== null) {
+          const break2End = assignment.break2 + 10
+          if (startTime < break2End && assignment.break2 < endTime) return true
+        }
       }
       // Check lunch period
       if (teacher.lunch_break_start && teacher.lunch_break_end) {
@@ -1123,23 +1125,51 @@ export async function POST(request: NextRequest) {
         lunchEnd = null
       }
 
+      // Calculate total work hours to determine number of breaks
+      // Rule: 1 ten-minute break per 4 hours worked
+      const lunchDuration = (lunchStart && lunchEnd) ? (lunchEnd - lunchStart) : 0
+      const totalWorkMinutes = (shiftEnd - shiftStart) - lunchDuration
+      const totalWorkHours = totalWorkMinutes / 60
+      const numberOfBreaks = Math.floor(totalWorkHours / 4) // 1 break per 4 hours
+
       // Calculate IDEAL break times at the midpoint of each work period
       // This spaces breaks evenly through the day, not clustered near lunch
       let idealBreak1: number
-      let idealBreak2: number
+      let idealBreak2: number | null = null // Only set if they qualify for 2 breaks
 
-      if (lunchStart && lunchEnd) {
-        // With lunch: break1 = middle of morning, break2 = middle of afternoon
-        const morningWorkDuration = lunchStart - shiftStart
-        idealBreak1 = shiftStart + Math.floor(morningWorkDuration / 2)
-
-        const afternoonWorkDuration = shiftEnd - lunchEnd
-        idealBreak2 = lunchEnd + Math.floor(afternoonWorkDuration / 2)
+      if (numberOfBreaks === 0) {
+        // Less than 4 hours - no breaks needed, but assign a placeholder
+        idealBreak1 = shiftStart + Math.floor((shiftEnd - shiftStart) / 2)
+      } else if (numberOfBreaks === 1) {
+        // 4-7.99 hours - one break at midpoint
+        if (lunchStart && lunchEnd) {
+          // With lunch: break in the longer work period (morning or afternoon)
+          const morningDuration = lunchStart - shiftStart
+          const afternoonDuration = shiftEnd - lunchEnd
+          if (morningDuration >= afternoonDuration) {
+            idealBreak1 = shiftStart + Math.floor(morningDuration / 2)
+          } else {
+            idealBreak1 = lunchEnd + Math.floor(afternoonDuration / 2)
+          }
+        } else {
+          // No lunch: break at midpoint
+          idealBreak1 = shiftStart + Math.floor((shiftEnd - shiftStart) / 2)
+        }
       } else {
-        // No lunch: split shift into thirds
-        const totalWork = shiftEnd - shiftStart
-        idealBreak1 = shiftStart + Math.floor(totalWork / 3)
-        idealBreak2 = shiftStart + Math.floor((totalWork * 2) / 3)
+        // 8+ hours - two breaks
+        if (lunchStart && lunchEnd) {
+          // With lunch: break1 = middle of morning, break2 = middle of afternoon
+          const morningWorkDuration = lunchStart - shiftStart
+          idealBreak1 = shiftStart + Math.floor(morningWorkDuration / 2)
+
+          const afternoonWorkDuration = shiftEnd - lunchEnd
+          idealBreak2 = lunchEnd + Math.floor(afternoonWorkDuration / 2)
+        } else {
+          // No lunch: split shift into thirds
+          const totalWork = shiftEnd - shiftStart
+          idealBreak1 = shiftStart + Math.floor(totalWork / 3)
+          idealBreak2 = shiftStart + Math.floor((totalWork * 2) / 3)
+        }
       }
 
       // Determine this teacher's section for break staggering
@@ -1165,28 +1195,31 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Find the best slot closest to ideal break2 time
-      let break2Time = idealBreak2
-      let bestBreak2Distance = Infinity
-      for (const slot of breakSlots) {
-        // Must be after lunch (with buffer) and before shift end
-        const afterLunch = lunchEnd ? slot.start >= lunchEnd + 30 : true
-        if (afterLunch && slot.end <= shiftEnd - 20) {
-          const sectionKey = `${teacherSection}:${slot.start}`
-          const slotUsage = usedSlotsBySection.get(sectionKey)?.length || 0
-          if (slotUsage < 1) { // Max 1 teacher per section per time slot
-            const distance = Math.abs(slot.start - idealBreak2)
-            if (distance < bestBreak2Distance) {
-              bestBreak2Distance = distance
-              break2Time = slot.start
+      // Find the best slot closest to ideal break2 time (only if they qualify for 2 breaks)
+      let break2Time: number | null = null
+      if (idealBreak2 !== null) {
+        break2Time = idealBreak2
+        let bestBreak2Distance = Infinity
+        for (const slot of breakSlots) {
+          // Must be after lunch (with buffer) and before shift end
+          const afterLunch = lunchEnd ? slot.start >= lunchEnd + 30 : true
+          if (afterLunch && slot.end <= shiftEnd - 20) {
+            const sectionKey = `${teacherSection}:${slot.start}`
+            const slotUsage = usedSlotsBySection.get(sectionKey)?.length || 0
+            if (slotUsage < 1) { // Max 1 teacher per section per time slot
+              const distance = Math.abs(slot.start - idealBreak2)
+              if (distance < bestBreak2Distance) {
+                bestBreak2Distance = distance
+                break2Time = slot.start
+              }
             }
           }
         }
-      }
 
-      // Ensure minimum gap between breaks
-      if (break2Time <= break1Time + 60) {
-        break2Time = Math.min(break1Time + 120, shiftEnd - 40)
+        // Ensure minimum gap between breaks
+        if (break2Time !== null && break2Time <= break1Time + 60) {
+          break2Time = Math.min(break1Time + 120, shiftEnd - 40)
+        }
       }
 
       // Track slot usage per section
@@ -1195,10 +1228,13 @@ export async function POST(request: NextRequest) {
       break1Users.push(teacher.id)
       usedSlotsBySection.set(break1Key, break1Users)
 
-      const break2Key = `${teacherSection}:${break2Time}`
-      const break2Users = usedSlotsBySection.get(break2Key) || []
-      break2Users.push(teacher.id)
-      usedSlotsBySection.set(break2Key, break2Users)
+      // Only track break2 slot if they have one
+      if (break2Time !== null) {
+        const break2Key = `${teacherSection}:${break2Time}`
+        const break2Users = usedSlotsBySection.get(break2Key) || []
+        break2Users.push(teacher.id)
+        usedSlotsBySection.set(break2Key, break2Users)
+      }
 
       breakAssignments.set(teacher.id, { break1: break1Time, break2: break2Time })
     }
@@ -1240,16 +1276,19 @@ export async function POST(request: NextRequest) {
         break1Sub = findSubstitute(teacher, assignment.break1, 10, classrooms, false)
       }
 
-      let break2Sub: string | null
-      if (isFloater) {
-        break2Sub = 'Flexible coverage' // Floaters don't need substitutes
-      } else if (isPreschoolRoom) {
-        break2Sub = 'Kids outside, sufficient coverage' // Preschool rooms combine during breaks
-      } else if (isInfantOrToddlerRoom) {
-        // Infant/toddler breaks need director coverage only
-        break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, true) // true = include directors
-      } else {
-        break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, false)
+      // Only calculate break2 substitute if they have a second break (8+ hour shift)
+      let break2Sub: string | null = null
+      if (assignment.break2 !== null) {
+        if (isFloater) {
+          break2Sub = 'Flexible coverage' // Floaters don't need substitutes
+        } else if (isPreschoolRoom) {
+          break2Sub = 'Kids outside, sufficient coverage' // Preschool rooms combine during breaks
+        } else if (isInfantOrToddlerRoom) {
+          // Infant/toddler breaks need director coverage only
+          break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, true) // true = include directors
+        } else {
+          break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, false)
+        }
       }
 
       // Determine effective lunch times considering schedule overrides
@@ -1282,8 +1321,8 @@ export async function POST(request: NextRequest) {
         break1_start: minutesToTime(assignment.break1),
         break1_end: minutesToTime(assignment.break1 + 10),
         break1_sub_name: break1Sub,
-        break2_start: minutesToTime(assignment.break2),
-        break2_end: minutesToTime(assignment.break2 + 10),
+        break2_start: assignment.break2 !== null ? minutesToTime(assignment.break2) : '',
+        break2_end: assignment.break2 !== null ? minutesToTime(assignment.break2 + 10) : '',
         break2_sub_name: break2Sub,
         lunch_start: effectiveLunchStart,
         lunch_end: effectiveLunchEnd,
