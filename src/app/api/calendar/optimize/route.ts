@@ -211,12 +211,17 @@ export async function POST(request: NextRequest) {
         const note = change.note.toLowerCase()
 
         // Parse "at [other school]" - teacher is working elsewhere, exclude from this schedule
-        // Matches: "at Mariner Square", "at Little Seeds", "working at Harbor Bay", etc.
-        const atOtherSchoolMatch = note.match(/(?:^at\s+|working\s+at\s+|assigned\s+to\s+|helping\s+at\s+)([a-z\s]+)/i)
+        // Matches: "at Mariner Square", "Mariner Square", "at MS", "MS", "working at Harbor Bay", etc.
+        const schoolNames = ['mariner square', 'mariner', 'ms', 'little seeds', 'harbor bay', 'hb', 'ls']
+        const atOtherSchoolMatch = note.match(/(?:^at\s+|working\s+at\s+|assigned\s+to\s+|helping\s+at\s+|^)([a-z\s]+)/i)
         if (atOtherSchoolMatch) {
-          teachersAtOtherSchool.add(name)
-          console.log(`[Optimize] ${name} working at another location: ${atOtherSchoolMatch[1].trim()}`)
-          continue // Skip other parsing for this teacher
+          const location = atOtherSchoolMatch[1].trim().toLowerCase()
+          // Check if the matched location is a known school name
+          if (schoolNames.some(school => location.includes(school) || school.includes(location))) {
+            teachersAtOtherSchool.add(name)
+            console.log(`[Optimize] ${name} working at another location: ${location}`)
+            continue // Skip other parsing for this teacher
+          }
         }
 
         // Parse "comes in at X" or "arrives at X" patterns
@@ -539,9 +544,21 @@ export async function POST(request: NextRequest) {
       console.log('[Optimize] Using director override student counts:', dailySummary.student_counts)
       // Director override: map age_group -> classroom(s) and use the counts
       // If multiple classrooms exist for the same age group, divide students equally
+
+      // Age group equivalents for flexible matching (different schools use different terms)
+      const ageGroupEquivalents: Record<string, string[]> = {
+        'twos': ['twos', 'toddler'],      // Some schools use "toddler" for 2yr
+        'toddler': ['toddler', 'twos'],   // Some schools use "twos" for toddler age
+        'infant': ['infant'],
+        'threes': ['threes'],
+        'pre_k': ['pre_k', 'preschool'],
+        'preschool': ['preschool', 'pre_k'],
+      }
+
       for (const { age_group, count } of dailySummary.student_counts) {
-        // Find ALL classrooms matching this age group
-        const matchingClassrooms = classrooms.filter(c => c.age_group === age_group)
+        // Find ALL classrooms matching this age group (with fallback equivalents)
+        const equivalents = ageGroupEquivalents[age_group] || [age_group]
+        const matchingClassrooms = classrooms.filter(c => equivalents.includes(c.age_group))
         if (matchingClassrooms.length > 0 && count > 0) {
           // Divide students equally among classrooms with this age group
           const studentsPerClassroom = Math.floor(count / matchingClassrooms.length)
