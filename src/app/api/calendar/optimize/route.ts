@@ -1307,12 +1307,18 @@ export async function POST(request: NextRequest) {
 
       // Calculate lunch substitute if teacher has lunch break within their effective shift
       // Include directors as potential substitutes for lunch coverage
+      // Aides/assistants and floaters don't need coverage - they're helpers, not primary staff
+      const isAide = teacher.role === 'assistant' || teacher.qualifications?.toLowerCase().includes('aide')
       let lunchSub: string | null = null
       if (effectiveLunchStart && effectiveLunchEnd) {
-        const lunchStart = timeToMinutes(effectiveLunchStart)
-        const lunchEnd = timeToMinutes(effectiveLunchEnd)
-        const lunchDuration = lunchEnd - lunchStart
-        lunchSub = findSubstitute(teacher, lunchStart, lunchDuration, classrooms, true)
+        if (isFloater || isAide) {
+          lunchSub = 'No coverage needed' // Helpers/aides are not counted in ratios
+        } else {
+          const lunchStart = timeToMinutes(effectiveLunchStart)
+          const lunchEnd = timeToMinutes(effectiveLunchEnd)
+          const lunchDuration = lunchEnd - lunchStart
+          lunchSub = findSubstitute(teacher, lunchStart, lunchDuration, classrooms, true)
+        }
       }
 
       optimizedBreaks.push({
