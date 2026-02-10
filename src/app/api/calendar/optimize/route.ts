@@ -1318,7 +1318,14 @@ export async function POST(request: NextRequest) {
       if (isFloater) {
         break1Sub = 'Flexible coverage' // Floaters don't need substitutes
       } else if (isPreschoolRoom) {
-        break1Sub = 'Kids outside, sufficient coverage' // Preschool rooms combine during breaks
+        // Preschool rooms: "Kids outside" ONLY during actual playground time
+        // At other times (e.g., 9:30am), kids are in classrooms and a real substitute is needed
+        const isPlayground1 = teacherClassroom && isDuringPlayground(assignment.break1, teacherClassroom.age_group)
+        if (isPlayground1) {
+          break1Sub = 'Kids outside, sufficient coverage'
+        } else {
+          break1Sub = findSubstitute(teacher, assignment.break1, 10, classrooms, true) // include directors
+        }
       } else if (isInfantOrToddlerRoom) {
         // Infant/toddler breaks need director coverage only
         break1Sub = findSubstitute(teacher, assignment.break1, 10, classrooms, true) // true = include directors
@@ -1332,7 +1339,12 @@ export async function POST(request: NextRequest) {
         if (isFloater) {
           break2Sub = 'Flexible coverage' // Floaters don't need substitutes
         } else if (isPreschoolRoom) {
-          break2Sub = 'Kids outside, sufficient coverage' // Preschool rooms combine during breaks
+          const isPlayground2 = teacherClassroom && isDuringPlayground(assignment.break2, teacherClassroom.age_group)
+          if (isPlayground2) {
+            break2Sub = 'Kids outside, sufficient coverage'
+          } else {
+            break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, true)
+          }
         } else if (isInfantOrToddlerRoom) {
           // Infant/toddler breaks need director coverage only
           break2Sub = findSubstitute(teacher, assignment.break2, 10, classrooms, true) // true = include directors
