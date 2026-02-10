@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
       (supabase as any).from('director_daily_summaries').select('teacher_absences, student_counts, schedule_changes').eq('school_id', school_id).eq('date', date).maybeSingle()
     ])
 
-    const allTeachers = (teachersRes.data || []) as Teacher[]
+    let allTeachers = (teachersRes.data || []) as Teacher[]
     const classrooms = (classroomsRes.data || []) as Classroom[]
     const students = (studentsRes.data || []) as Student[]
     const attendance = (attendanceRes.data || []) as { student_id: string }[]
@@ -197,6 +197,45 @@ export async function POST(request: NextRequest) {
       console.log('[Optimize] Teacher absences:', dailySummary.teacher_absences)
       console.log('[Optimize] Student counts:', dailySummary.student_counts)
       console.log('[Optimize] Schedule changes:', dailySummary.schedule_changes)
+    }
+
+    // Check for teachers from OTHER schools who are helping at THIS school today
+    // If a name in schedule_changes isn't found in this school's teachers, look them up
+    if (dailySummary?.schedule_changes) {
+      const namesInScheduleChanges = dailySummary.schedule_changes.map(c => c.name.toLowerCase().trim())
+      const localTeacherNames = new Set(allTeachers.map(t => t.first_name.toLowerCase().trim()))
+      const localTeacherFullNames = new Set(allTeachers.map(t => `${t.first_name} ${t.last_name}`.toLowerCase().trim()))
+
+      // Find names that aren't in this school's teacher list
+      const externalNames = namesInScheduleChanges.filter(name =>
+        !localTeacherNames.has(name) && !localTeacherFullNames.has(name)
+      )
+
+      if (externalNames.length > 0) {
+        console.log('[Optimize] Looking for external teachers:', externalNames)
+        // Fetch teachers from other schools by first name match
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: externalTeachers } = await (supabase as any)
+          .from('teachers')
+          .select('*')
+          .neq('school_id', school_id)
+          .eq('status', 'active')
+
+        if (externalTeachers) {
+          for (const extTeacher of externalTeachers as Teacher[]) {
+            const firstName = extTeacher.first_name.toLowerCase().trim()
+            const fullName = `${extTeacher.first_name} ${extTeacher.last_name}`.toLowerCase().trim()
+            if (externalNames.includes(firstName) || externalNames.includes(fullName)) {
+              console.log(`[Optimize] Adding external teacher: ${extTeacher.first_name} ${extTeacher.last_name}`)
+              // Mark as floater at this school (no classroom assignment here)
+              allTeachers.push({
+                ...extTeacher,
+                classroom_title: null, // They float at this school
+              })
+            }
+          }
+        }
+      }
     }
 
     // Build a map of schedule overrides from director's schedule_changes
@@ -1038,13 +1077,15 @@ export async function POST(request: NextRequest) {
           )
           for (const colleague of sameRoomColleagues) {
             if (!isBasicValidCandidate(colleague)) continue
-            // During nap time, check if having one less teacher still meets ratio
+            // During nap time, check if the remaining teachers (excluding the one on break) meet ratio
+            // Note: getClassroomTeacherCount already excludes the teacher on break since their lunch overlaps
             const classroomStudents = studentsByClassroom.get(teacherClassroom.id) || []
             const napRatio = napRatios[teacherClassroom.age_group as keyof RatioSettings] || 24
             const requiredDuringNap = Math.ceil(classroomStudents.length / napRatio)
             const currentInRoom = getClassroomTeacherCount(teacherOnBreak.classroom_title!, breakTime)
-            // If after one person takes break, there's still enough coverage
-            if (currentInRoom - 1 >= requiredDuringNap) {
+            // If the remaining teachers (colleague included) meet the nap ratio, they can cover
+            // No need to subtract 1 - the colleague stays in the room, they don't "leave" to cover
+            if (currentInRoom >= requiredDuringNap) {
               recordSubstituteAssignment(colleague.id, breakTime, breakEndTime)
               return `${colleague.first_name} covers`
             }

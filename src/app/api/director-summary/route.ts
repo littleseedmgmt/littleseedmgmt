@@ -44,8 +44,9 @@ Age groups to recognize and normalize to these exact database values:
 - "pre_k" for: 4s, 4yr, 4 yr, 4yr old, 4-year-old, fours, four year old, pre-k, prek, preschool, dragonflies
 
 For staffing:
-- "QT", "qualified", "qualified teacher" = qualified_teachers count
+- "QT", "qualified", "qualified teacher", "staff" = qualified_teachers count
 - "Aide", "Aid", "aide", "assistant" = aides count
+- IMPORTANT: When the message says just a number followed by "staff" (e.g., "3 staff"), treat that as qualified_teachers count
 
 Return JSON only, no explanation. Use this exact structure:
 {

@@ -589,9 +589,8 @@ export default function CalendarPage() {
             // Create a map of classroom IDs to names
             const classroomMap = new Map(classrooms.map(c => [c.id, c.name]))
 
-            // Build schedule for each staff member
+            // Build schedule for each staff member (including directors/assistant directors as additional staff)
             const staffSchedules: StaffDaySchedule[] = staff
-              .filter(t => t.role !== 'director' && t.role !== 'assistant_director')
               .map(teacher => {
                 const teacherShifts = shifts.filter((s) => {
                   const shift = s as { teacher_id?: string }
@@ -1144,12 +1143,15 @@ function SchoolTimelineCard({
           <tbody>
             {[...schedule.staff].sort((a, b) => {
               // Sort by classroom age group: infant first, then toddler, twos, threes, pre_k
-              // Teachers without classroom (floaters) go last
+              // Directors/assistant directors at the bottom as additional staff
+              // Floaters go before directors but after classroom teachers
               const ageOrder: Record<string, number> = {
                 'infant': 1, 'toddler': 2, 'twos': 3, 'threes': 4, 'preschool': 5, 'pre_k': 6
               }
-              const getClassroomOrder = (teacher: { classroom_title: string | null }) => {
-                if (!teacher.classroom_title) return 99 // Floaters go last
+              const getClassroomOrder = (teacher: { classroom_title: string | null; role: string }) => {
+                // Directors and assistant directors go last
+                if (teacher.role === 'director' || teacher.role === 'assistant_director') return 100
+                if (!teacher.classroom_title) return 99 // Floaters go before directors
                 // Find matching classroom to get age_group
                 const classroom = schedule.classrooms.find(c => {
                   if (!teacher.classroom_title) return false
@@ -1171,12 +1173,21 @@ function SchoolTimelineCard({
                 className={staffIdx > 0 ? 'border-t-2 border-gray-300' : ''}
               >
                 {/* Staff Name - Fixed width */}
-                <td className="w-28 min-w-[112px] px-3 py-3 border-r-2 border-gray-300 bg-gray-50 align-top text-sm">
+                <td className={`w-28 min-w-[112px] px-3 py-3 border-r-2 border-gray-300 align-top text-sm ${
+                  staffSchedule.teacher.role === 'director' || staffSchedule.teacher.role === 'assistant_director'
+                    ? 'bg-indigo-50' : 'bg-gray-50'
+                }`}>
                   <div className="font-bold text-gray-900">{staffSchedule.teacher.first_name}</div>
+                  {staffSchedule.teacher.role === 'director' && (
+                    <div className="text-xs text-indigo-600 font-semibold">Director</div>
+                  )}
+                  {staffSchedule.teacher.role === 'assistant_director' && (
+                    <div className="text-xs text-indigo-600 font-semibold">Asst. Director</div>
+                  )}
                   {staffSchedule.teacher.qualifications?.toLowerCase().includes('infant') && (
                     <div className="text-xs text-cyan-600 font-medium">Infant-qualified</div>
                   )}
-                  {staffSchedule.teacher.classroom_title && (
+                  {staffSchedule.teacher.classroom_title && staffSchedule.teacher.role !== 'director' && staffSchedule.teacher.role !== 'assistant_director' && (
                     <div className="text-xs text-gray-500">{staffSchedule.teacher.classroom_title}</div>
                   )}
                 </td>
@@ -1588,6 +1599,62 @@ function SchoolClassroomView({
                 </tr>
               )
             })}
+            {/* Additional Staff row for directors/assistant directors */}
+            {(() => {
+              const directorStaff = schedule.staff.filter(s =>
+                s.teacher.role === 'director' || s.teacher.role === 'assistant_director'
+              )
+              if (directorStaff.length === 0) return null
+              return (
+                <tr className="border-t-2 border-indigo-200">
+                  <td className="w-40 min-w-[160px] px-3 py-3 border-r border-gray-200 bg-indigo-50 align-top">
+                    <div className="font-bold text-indigo-700 text-sm">Additional Staff</div>
+                    <div className="text-xs text-indigo-500 mt-1">Directors</div>
+                  </td>
+                  {timeSlots.map(slot => {
+                    const availableDirectors = directorStaff.filter(s => {
+                      return s.blocks.some(block => {
+                        const blockStartHour = parseInt(block.start_time.split(':')[0])
+                        const blockEndHour = parseInt(block.end_time.split(':')[0])
+                        const blockEndMin = parseInt(block.end_time.split(':')[1] || '0')
+                        const effectiveEnd = blockEndMin > 0 ? blockEndHour + 1 : blockEndHour
+                        return block.type === 'work' && blockStartHour <= slot.hour && effectiveEnd > slot.hour
+                      })
+                    })
+                    const onBreakDirectors = directorStaff.filter(s => {
+                      return s.blocks.some(block => {
+                        const blockStart = parseInt(block.start_time.split(':')[0]) * 60 + parseInt(block.start_time.split(':')[1] || '0')
+                        const blockEnd = parseInt(block.end_time.split(':')[0]) * 60 + parseInt(block.end_time.split(':')[1] || '0')
+                        const hourStart = slot.hour * 60
+                        const hourEnd = (slot.hour + 1) * 60
+                        return (block.type === 'break' || block.type === 'lunch') && blockStart < hourEnd && blockEnd > hourStart
+                      })
+                    })
+                    return (
+                      <td key={slot.hour} className="min-w-[80px] px-2 py-2 border-r border-gray-200 align-top text-xs bg-indigo-50/30">
+                        {availableDirectors.map((s, idx) => (
+                          <div key={idx} className="text-indigo-700 font-medium">
+                            {s.teacher.first_name}
+                            <span className="text-indigo-400 text-xs ml-0.5">
+                              {s.teacher.role === 'director' ? '(D)' : '(AD)'}
+                            </span>
+                          </div>
+                        ))}
+                        {onBreakDirectors.map((s, idx) => (
+                          <div key={`brk-${idx}`} className="text-orange-600 text-xs">
+                            <span className="font-medium">{s.teacher.first_name}</span>
+                            <span className="text-orange-500"> (Lunch)</span>
+                          </div>
+                        ))}
+                        {availableDirectors.length === 0 && onBreakDirectors.length === 0 && (
+                          <span className="text-gray-300">-</span>
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })()}
           </tbody>
         </table>
       </div>
@@ -1609,6 +1676,10 @@ function SchoolClassroomView({
         <div className="flex items-center gap-2">
           <span className="text-red-500 font-semibold">No coverage</span>
           <span className="text-gray-600">= No substitute available</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-indigo-700 font-medium">Name (D/AD)</span>
+          <span className="text-gray-600">= Director / Asst. Director</span>
         </div>
       </div>
 
@@ -1692,9 +1763,18 @@ function SchoolDayCard({
         {schedule.staff.map((staffSchedule) => (
           <div key={staffSchedule.teacher.id} className="border border-gray-200 rounded-lg overflow-hidden">
             {/* Staff Name Header */}
-            <div className="bg-gray-100 px-4 py-2 border-b border-gray-200">
+            <div className={`px-4 py-2 border-b border-gray-200 ${
+              staffSchedule.teacher.role === 'director' || staffSchedule.teacher.role === 'assistant_director'
+                ? 'bg-indigo-50' : 'bg-gray-100'
+            }`}>
               <span className="font-bold text-gray-900">{staffSchedule.teacher.first_name} {staffSchedule.teacher.last_name}</span>
-              {staffSchedule.teacher.classroom_title && (
+              {staffSchedule.teacher.role === 'director' && (
+                <span className="text-indigo-600 ml-2 text-sm font-semibold">(Director)</span>
+              )}
+              {staffSchedule.teacher.role === 'assistant_director' && (
+                <span className="text-indigo-600 ml-2 text-sm font-semibold">(Asst. Director)</span>
+              )}
+              {staffSchedule.teacher.classroom_title && staffSchedule.teacher.role !== 'director' && staffSchedule.teacher.role !== 'assistant_director' && (
                 <span className="text-gray-500 ml-2 text-sm">({staffSchedule.teacher.classroom_title})</span>
               )}
             </div>
