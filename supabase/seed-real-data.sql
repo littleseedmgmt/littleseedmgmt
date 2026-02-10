@@ -204,9 +204,9 @@ INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_bi
   ('11111111-1111-1111-1111-111111111111', 'c1111111-0001-0001-0001-000000000005', 'Amelia', 'Sarratore', '2021-07-25', 'Parent Sarratore', '510-555-0180', 'enrolled', '2024-08-06', '12:00', '14:30'),
   ('11111111-1111-1111-1111-111111111111', 'c1111111-0001-0001-0001-000000000005', 'Sierra', 'Hake', '2021-05-25', 'Parent Hake', '510-555-0181', 'enrolled', '2024-08-02', '12:00', '14:30');
 
--- LITTLE SEEDS CHILDREN'S CENTER STUDENTS (41 total)
+-- LITTLE SEEDS CHILDREN'S CENTER STUDENTS (44 total)
 
--- Squirrels (1-2 yr) - 8 students
+-- Squirrels (1-2 yr) - 9 students
 INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_birth, guardian_name, guardian_phone, status, enrollment_date, nap_start, nap_end) VALUES
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000001', 'Zoe', 'Caniglia', '2025-01-25', 'Parent Caniglia', '510-555-0201', 'enrolled', '2026-01-01', '12:00', '14:30'),
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000001', 'Quinn', 'Dito', '2024-07-25', 'Parent Dito', '510-555-0202', 'enrolled', '2025-05-01', '12:00', '14:30'),
@@ -215,7 +215,8 @@ INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_bi
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000001', 'Dawn', 'Beckegger', '2024-08-25', 'Parent Beckegger', '510-555-0205', 'enrolled', '2025-08-01', '12:00', '14:30'),
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000001', 'Imogen', 'Cheng-Wright', '2024-05-25', 'Parent Cheng-Wright', '510-555-0206', 'enrolled', '2025-07-01', '12:00', '14:30'),
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000001', 'Jack', 'Barker', '2024-04-25', 'Parent Barker', '510-555-0207', 'enrolled', '2025-10-01', '12:00', '14:30'),
-  ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000001', 'Inara', 'Edwards', '2024-02-25', 'Parent Edwards', '510-555-0208', 'enrolled', '2025-04-16', '12:00', '14:30');
+  ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000001', 'Inara', 'Edwards', '2024-02-25', 'Parent Edwards', '510-555-0208', 'enrolled', '2025-04-16', '12:00', '14:30'),
+  ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000001', 'Eloise', 'Patel', '2024-09-25', 'Parent Patel', '510-555-0242', 'enrolled', '2026-01-15', '12:00', '14:30');
 
 -- Bunnies (2yr) - 13 students
 INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_birth, guardian_name, guardian_phone, status, enrollment_date, nap_start, nap_end) VALUES
@@ -233,7 +234,7 @@ INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_bi
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000002', 'Clementine', 'Yu', '2023-04-25', 'Parent Yu', '510-555-0220', 'enrolled', '2025-10-01', '12:00', '14:30'),
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000002', 'Marina', 'Doty', '2023-04-25', 'Parent Doty', '510-555-0221', 'enrolled', '2025-09-01', '12:00', '14:30');
 
--- Chipmunks (3yr) - 10 students
+-- Chipmunks (3yr) - 11 students
 INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_birth, guardian_name, guardian_phone, status, enrollment_date, nap_start, nap_end) VALUES
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000003', 'Charlotte', 'Basu', '2023-03-25', 'Parent Basu', '510-555-0222', 'enrolled', '2026-01-01', '12:00', '14:30'),
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000003', 'Rex', 'Fong-Rivadeneira', '2022-12-25', 'Parent Fong-Rivadeneira', '510-555-0223', 'enrolled', '2025-07-01', '12:00', '14:30'),
@@ -244,9 +245,10 @@ INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_bi
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000003', 'Sam', 'Toldi-Vo', '2022-05-25', 'Parent Toldi-Vo', '510-555-0228', 'enrolled', '2025-01-01', '12:00', '14:30'),
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000003', 'Leo', 'Sontag', '2022-03-25', 'Parent Sontag', '510-555-0229', 'enrolled', '2025-01-01', '12:00', '14:30'),
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000003', 'Everly', 'Apavatjrut', '2022-09-25', 'Parent Apavatjrut', '510-555-0230', 'enrolled', '2025-09-01', '12:00', '14:30'),
-  ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000003', 'Arissa', 'Duey', '2022-06-25', 'Parent Duey', '510-555-0231', 'enrolled', '2026-01-01', '12:00', '14:30');
+  ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000003', 'Arissa', 'Duey', '2022-06-25', 'Parent Duey', '510-555-0231', 'enrolled', '2026-01-01', '12:00', '14:30'),
+  ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000003', 'Maya', 'Sinclair', '2022-07-25', 'Parent Sinclair', '510-555-0243', 'enrolled', '2026-02-01', '12:00', '14:30');
 
--- Bears (4-5 yr) - 10 students
+-- Bears (4-5 yr) - 11 students
 INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_birth, guardian_name, guardian_phone, status, enrollment_date, nap_start, nap_end) VALUES
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000004', 'Cadence', 'Massara', '2022-02-25', 'Parent Massara', '510-555-0232', 'enrolled', '2025-01-02', '12:00', '14:30'),
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000004', 'Zoey', 'Sychrava', '2022-02-25', 'Parent Sychrava', '510-555-0233', 'enrolled', '2025-05-01', '12:00', '14:30'),
@@ -257,9 +259,10 @@ INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_bi
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000004', 'Nathan', 'Ortega', '2021-11-25', 'Parent Ortega', '510-555-0238', 'enrolled', '2025-11-01', '12:00', '14:30'),
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000004', 'Kiran', 'Thomas', '2021-09-25', 'Parent Thomas', '510-555-0239', 'enrolled', '2024-09-01', '12:00', '14:30'),
   ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000004', 'Grayson', 'Bennett', '2021-06-25', 'Parent Bennett', '510-555-0240', 'enrolled', '2023-06-16', '12:00', '14:30'),
-  ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000004', 'Beckett', 'Casey', '2021-07-25', 'Parent Casey', '510-555-0241', 'enrolled', '2025-01-01', '12:00', '14:30');
+  ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000004', 'Beckett', 'Casey', '2021-07-25', 'Parent Casey', '510-555-0241', 'enrolled', '2025-01-01', '12:00', '14:30'),
+  ('22222222-2222-2222-2222-222222222222', 'c2222222-0001-0001-0001-000000000004', 'Leo', 'Ramirez', '2021-08-25', 'Parent Ramirez', '510-555-0244', 'enrolled', '2026-01-15', '12:00', '14:30');
 
--- PETER PAN HARBOR BAY STUDENTS (49 total)
+-- PETER PAN HARBOR BAY STUDENTS (51 total)
 
 -- Ladybugs (6 month-24 months) - 11 students
 INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_birth, guardian_name, guardian_phone, status, enrollment_date, nap_start, nap_end) VALUES
@@ -294,7 +297,7 @@ INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_bi
   ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000002', 'Amelia', 'Ying', '2022-07-25', 'Parent Ying', '510-555-0326', 'enrolled', '2026-01-01', '12:00', '14:30'),
   ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000002', 'Nadine', 'Park', '2022-08-25', 'Parent Park', '510-555-0327', 'enrolled', '2025-08-01', '12:00', '14:30');
 
--- Butterflies (3 yr) - 12 students
+-- Butterflies (3 yr) - 13 students
 INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_birth, guardian_name, guardian_phone, status, enrollment_date, nap_start, nap_end) VALUES
   ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000003', 'Matthew', 'Yang', '2022-08-25', 'Parent Yang', '510-555-0328', 'enrolled', '2025-04-01', '12:00', '14:30'),
   ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000003', 'Jack', 'Riddell', '2022-10-25', 'Parent Riddell2', '510-555-0329', 'enrolled', '2025-04-01', '12:00', '14:30'),
@@ -307,9 +310,10 @@ INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_bi
   ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000003', 'Aary', 'Anand', '2022-05-25', 'Parent Anand', '510-555-0336', 'enrolled', '2025-01-01', '12:00', '14:30'),
   ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000003', 'Abigail', 'Chia', '2022-05-25', 'Parent Chia2', '510-555-0337', 'enrolled', '2025-01-01', '12:00', '14:30'),
   ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000003', 'Emmett', 'Mejia', '2021-12-25', 'Parent Mejia', '510-555-0338', 'enrolled', '2025-01-01', '12:00', '14:30'),
-  ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000003', 'Brooks', 'Arnold', '2021-08-25', 'Parent Arnold2', '510-555-0339', 'enrolled', '2025-01-01', '12:00', '14:30');
+  ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000003', 'Brooks', 'Arnold', '2021-08-25', 'Parent Arnold2', '510-555-0339', 'enrolled', '2025-01-01', '12:00', '14:30'),
+  ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000003', 'Ethan', 'Nakamura', '2022-03-25', 'Parent Nakamura', '510-555-0350', 'enrolled', '2026-01-20', '12:00', '14:30');
 
--- Dragonflies (4-5 yr) - 10 students
+-- Dragonflies (4-5 yr) - 11 students
 INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_birth, guardian_name, guardian_phone, status, enrollment_date, nap_start, nap_end) VALUES
   ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000004', 'Katerina', 'Malkova', '2021-09-25', 'Parent Malkova', '510-555-0340', 'enrolled', '2025-01-01', '12:00', '14:30'),
   ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000004', 'Annabelle', 'Chern', '2021-08-25', 'Parent Chern', '510-555-0341', 'enrolled', '2024-08-01', '12:00', '14:30'),
@@ -320,7 +324,8 @@ INSERT INTO students (school_id, classroom_id, first_name, last_name, date_of_bi
   ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000004', 'Kaylee', 'Ceaser', '2022-01-25', 'Parent Ceaser', '510-555-0346', 'enrolled', '2025-12-01', '12:00', '14:30'),
   ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000004', 'Zoe', 'Kim', '2021-05-25', 'Parent Kim3', '510-555-0347', 'enrolled', '2024-08-02', '12:00', '14:30'),
   ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000004', 'Sofia', 'Schultz', '2021-10-25', 'Parent Schultz', '510-555-0348', 'enrolled', '2025-12-01', '12:00', '14:30'),
-  ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000004', 'Kira', 'Scott', '2021-10-25', 'Parent Scott', '510-555-0349', 'enrolled', '2025-08-01', '12:00', '14:30');
+  ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000004', 'Kira', 'Scott', '2021-10-25', 'Parent Scott', '510-555-0349', 'enrolled', '2025-08-01', '12:00', '14:30'),
+  ('33333333-3333-3333-3333-333333333333', 'c3333333-0001-0001-0001-000000000004', 'Mila', 'Torres', '2021-11-25', 'Parent Torres', '510-555-0351', 'enrolled', '2026-02-01', '12:00', '14:30');
 
 -- ============================================
 -- STEP 6: INSERT SETTINGS
