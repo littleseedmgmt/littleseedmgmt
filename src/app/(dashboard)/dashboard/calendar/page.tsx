@@ -1088,6 +1088,25 @@ function SchoolTimelineCard({
     }
   }
 
+  // Calculate earliest start time across all staff for time-aligned spacer cells
+  // This ensures afternoon-only staff (e.g., Macekshia 1:30pm) don't appear flush-left
+  const timeToMin = (t: string) => {
+    const [h, m] = t.split(':').map(Number)
+    return h * 60 + (m || 0)
+  }
+  const allBlocks = schedule.staff.flatMap(s => s.blocks)
+  const earliestStartMin = allBlocks.length > 0
+    ? Math.min(...allBlocks.map(b => timeToMin(b.start_time)))
+    : 7 * 60
+  // Calculate number of spacer cells to add before a teacher's first block
+  // Each spacer represents ~2 hours to match typical block column widths
+  const getSpacerCount = (blocks: TimeBlock[]): number => {
+    if (blocks.length === 0) return 0
+    const firstBlockMin = timeToMin(blocks[0].start_time)
+    const gapMinutes = firstBlockMin - earliestStartMin
+    return Math.floor(gapMinutes / 120) // 1 spacer per 2 hours of gap
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden print:rounded-none print:border-black">
       {/* School Header with Coverage Summary */}
@@ -1191,6 +1210,11 @@ function SchoolTimelineCard({
                     <div className="text-xs text-gray-500">{staffSchedule.teacher.classroom_title}</div>
                   )}
                 </td>
+
+                {/* Spacer cells for time alignment (so afternoon shifts don't appear flush-left) */}
+                {Array.from({ length: getSpacerCount(staffSchedule.blocks) }, (_, i) => (
+                  <td key={`spacer-${i}`} className="min-w-[140px] px-3 py-2 border-r border-gray-200 bg-gray-50"></td>
+                ))}
 
                 {/* Time Blocks - Equal width columns */}
                 {staffSchedule.blocks.map((block, idx) => (
