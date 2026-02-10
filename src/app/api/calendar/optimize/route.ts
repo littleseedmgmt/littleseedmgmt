@@ -81,6 +81,7 @@ interface OptimizationResult {
     all_teachers_count: number
     filtered_teachers_count: number
     filtered_teachers: string[]
+    floater_assignments: { teacher: string; classroom: string; reason: string }[]
   }
 }
 
@@ -301,9 +302,35 @@ export async function POST(request: NextRequest) {
     // Get set of teacher IDs who are out on PTO for this date
     const teachersOnPTO = new Set(ptoRecords.map(p => p.teacher_id))
 
+    // Common teacher nicknames -> canonical first names
+    const teacherNicknames: Record<string, string> = {
+      'izzy': 'isabel', 'liz': 'elizabeth', 'beth': 'elizabeth',
+      'mike': 'michael', 'chris': 'christina', 'tina': 'christina',
+      'jen': 'jennifer', 'jenny': 'jennifer', 'bob': 'robert',
+      'sam': 'samantha', 'dan': 'daniel', 'danny': 'daniel',
+      'tom': 'thomas', 'nick': 'nicholas', 'alex': 'alexander',
+      'kate': 'katherine', 'katie': 'katherine', 'sue': 'susan',
+      'suzy': 'susan', 'meg': 'megan', 'deb': 'deborah', 'debbie': 'deborah',
+    }
+
+    // Build a set of all known teacher first names (lowercase) for nickname resolution
+    const knownTeacherFirstNames = new Set(allTeachers.map(t => t.first_name.toLowerCase().trim()))
+
+    // Resolve a name that might be a nickname to the canonical teacher first name
+    const resolveTeacherName = (name: string): string => {
+      const lower = name.toLowerCase().trim()
+      // If the name directly matches a known teacher, use it
+      if (knownTeacherFirstNames.has(lower)) return lower
+      // Check nickname map
+      const canonical = teacherNicknames[lower]
+      if (canonical && knownTeacherFirstNames.has(canonical)) return canonical
+      return lower // Return as-is
+    }
+
     // Get teacher names who are absent from director's daily summary
+    // Resolve nicknames so "Izzy" matches "Isabel" etc.
     const absentTeacherNames = new Set(
-      (dailySummary?.teacher_absences || []).map(name => name.toLowerCase().trim())
+      (dailySummary?.teacher_absences || []).map(name => resolveTeacherName(name))
     )
     // Also add teachers working at other schools to absent list
     for (const name of teachersAtOtherSchool) {
@@ -348,7 +375,7 @@ export async function POST(request: NextRequest) {
       afternoon?: PlaygroundPeriod
     }
     const playgroundTimes: PlaygroundTimes = playgroundTimesSetting?.setting_value || {
-      morning: { start: '09:30', end: '11:00', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] },
+      morning: { start: '10:00', end: '11:00', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] },
       afternoon: { start: '15:30', end: '16:30', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] }
     }
 
@@ -663,6 +690,81 @@ export async function POST(request: NextRequest) {
       t.regular_shift_start &&
       t.regular_shift_end
     )
+
+    // FLOATER CLASSROOM ASSIGNMENT (Issues #11 & #14)
+    // When teachers are absent, their classrooms may be short-staffed.
+    // Assign available floaters to fill gaps BEFORE break optimization.
+    // This ensures floaters show up as assigned to that room for the day.
+    const floaterAssignments: { teacherId: string; assignedClassroom: string; reason: string }[] = []
+
+    // Helper: flexible classroom name matching (same logic used later, defined here for reuse)
+    const classroomNamesMatchEarly = (teacherClassroom: string | null, dbClassroomName: string): boolean => {
+      if (!teacherClassroom) return false
+      if (teacherClassroom === dbClassroomName) return true
+      const teacherLower = teacherClassroom.toLowerCase().trim()
+      const dbLower = dbClassroomName.toLowerCase().trim()
+      if (dbLower.includes(teacherLower) || teacherLower.includes(dbLower)) return true
+      if (dbLower.startsWith(teacherLower) || teacherLower.startsWith(dbLower)) return true
+      const parenMatch = dbLower.match(/\(([^)]+)\)/)
+      if (parenMatch) {
+        const insideParens = parenMatch[1].trim()
+        if (insideParens === teacherLower || insideParens.includes(teacherLower) || teacherLower.includes(insideParens)) return true
+      }
+      return false
+    }
+
+    for (const classroom of classrooms) {
+      const classroomStudents = studentsByClassroom.get(classroom.id) || []
+      const studentCount = classroomStudents.length
+      if (studentCount === 0) continue
+
+      // How many teachers are assigned to this classroom (after filtering absences)?
+      const assignedTeachers = workingTeachers.filter(t =>
+        classroomNamesMatchEarly(t.classroom_title, classroom.name) &&
+        t.regular_shift_start && t.regular_shift_end
+      )
+
+      // How many teachers does this classroom need at peak time?
+      const isNapAtPeak = isDuringNapForClassroom(10 * 60, classroom)
+      const requiredTeachers = getRequiredTeachers(classroom, studentCount, isNapAtPeak, normalRatios, napRatios)
+
+      const shortage = requiredTeachers - assignedTeachers.length
+
+      if (shortage > 0) {
+        console.log(`[Optimize] Classroom "${classroom.name}" is short ${shortage} teacher(s) (has ${assignedTeachers.length}, needs ${requiredTeachers})`)
+
+        // Find available floaters to fill the gap
+        const isInfantRoom = classroom.age_group === 'infant' || classroom.age_group === 'toddler'
+        for (let i = 0; i < shortage; i++) {
+          const availableFloater = workingTeachers.find(t => {
+            // Must be a floater or have no classroom assignment
+            if (t.classroom_title && t.classroom_title.toLowerCase() !== 'anywhere') return false
+            if (t.role !== 'floater' && t.classroom_title) return false
+            // Must not already be assigned to another classroom by us
+            if (floaterAssignments.some(fa => fa.teacherId === t.id)) return false
+            // Infant rooms need infant-qualified teachers
+            if (isInfantRoom && !isInfantQualified(t)) return false
+            return true
+          })
+
+          if (availableFloater) {
+            console.log(`[Optimize] Assigning floater ${availableFloater.first_name} to "${classroom.name}" to cover shortage`)
+            availableFloater.classroom_title = classroom.name // Assign for today
+            floaterAssignments.push({
+              teacherId: availableFloater.id,
+              assignedClassroom: classroom.name,
+              reason: `Covering for absent teacher(s) in ${classroom.name}`
+            })
+          } else {
+            console.log(`[Optimize] No available floater to cover "${classroom.name}" shortage`)
+          }
+        }
+      }
+    }
+
+    if (floaterAssignments.length > 0) {
+      console.log('[Optimize] Floater assignments:', floaterAssignments)
+    }
 
     const alerts: StaffingAlert[] = []
     const optimizedBreaks: OptimizedBreak[] = []
@@ -1497,7 +1599,12 @@ export async function POST(request: NextRequest) {
         student_counts_from_director: dailySummary?.student_counts || null,
         all_teachers_count: allTeachers.length,
         filtered_teachers_count: teachers.length,
-        filtered_teachers: teachers.map(t => t.first_name)
+        filtered_teachers: teachers.map(t => t.first_name),
+        floater_assignments: floaterAssignments.map(fa => ({
+          teacher: workingTeachers.find(t => t.id === fa.teacherId)?.first_name || fa.teacherId,
+          classroom: fa.assignedClassroom,
+          reason: fa.reason
+        }))
       }
     }
 

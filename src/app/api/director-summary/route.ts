@@ -28,13 +28,45 @@ interface SchoolRecord {
   name: string
 }
 
-const getSystemPrompt = (directorName: string | null) => `You are parsing daily attendance messages from daycare directors.
+// Common teacher nicknames -> canonical first names
+// Used to resolve informal names in WhatsApp messages
+const TEACHER_NICKNAMES: Record<string, string> = {
+  'izzy': 'Isabel',
+  'liz': 'Elizabeth',
+  'beth': 'Elizabeth',
+  'mike': 'Michael',
+  'chris': 'Christina',
+  'tina': 'Christina',
+  'jen': 'Jennifer',
+  'jenny': 'Jennifer',
+  'bob': 'Robert',
+  'rob': 'Robert',
+  'sam': 'Samantha',
+  'dan': 'Daniel',
+  'danny': 'Daniel',
+  'tom': 'Thomas',
+  'tommy': 'Thomas',
+  'nick': 'Nicholas',
+  'alex': 'Alexander',
+  'pat': 'Patricia',
+  'kate': 'Katherine',
+  'katie': 'Katherine',
+  'sue': 'Susan',
+  'suzy': 'Susan',
+  'meg': 'Megan',
+  'deb': 'Deborah',
+  'debbie': 'Deborah',
+}
+
+const getSystemPrompt = (directorName: string | null, teacherNames: string[] | null) => `You are parsing daily attendance messages from daycare directors.
 Extract:
 1. Student counts by age group with staffing (qualified teachers, aides)
 2. Teacher absences (names of staff who are out)
 3. Schedule changes (staff leaving early, arriving late, etc.)
 
 IMPORTANT: ${directorName ? `The director sending this message is "${directorName}". If the message contains "I" referring to the director (e.g., "I leave early", "I'll be out", "I come in late"), replace "I" with "${directorName}" in the schedule_changes.` : 'If "I" is used without a name, use "Director" as the name.'}
+
+${teacherNames ? `Known teacher names at this school: ${teacherNames.join(', ')}. If the message uses nicknames or short forms (e.g., "Izzy" for "Isabel", "Chris" for "Christina"), always map to the official name from this list.` : ''}
 
 Age groups to recognize and normalize to these exact database values:
 - "infant" for: infant, infants, babies, baby, ladybugs
@@ -88,20 +120,31 @@ export async function POST(request: NextRequest) {
 
     const school = schoolData as SchoolRecord
 
-    // Look up the director of this school
+    // Look up the director and all teacher names for this school
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabaseAny = supabase as any
-    const { data: directorData } = await supabaseAny
-      .from('teachers')
-      .select('first_name, last_name')
-      .eq('school_id', school_id)
-      .eq('role', 'director')
-      .eq('status', 'active')
-      .single()
+    const [directorResult, teacherNamesResult] = await Promise.all([
+      supabaseAny
+        .from('teachers')
+        .select('first_name, last_name')
+        .eq('school_id', school_id)
+        .eq('role', 'director')
+        .eq('status', 'active')
+        .single(),
+      supabaseAny
+        .from('teachers')
+        .select('first_name')
+        .eq('school_id', school_id)
+        .eq('status', 'active')
+    ])
 
+    const directorData = directorResult.data
     const directorName = directorData
       ? `${directorData.first_name} ${directorData.last_name}`
       : null
+
+    // Get all teacher first names for nickname resolution in the prompt
+    const teacherNames: string[] = (teacherNamesResult.data || []).map((t: { first_name: string }) => t.first_name)
 
     // Call Claude API to parse the message
     const anthropic = new Anthropic({
@@ -117,7 +160,7 @@ export async function POST(request: NextRequest) {
           content: `Parse this daycare attendance message:\n\n${raw_message}`,
         },
       ],
-      system: getSystemPrompt(directorName),
+      system: getSystemPrompt(directorName, teacherNames),
     })
 
     // Extract the text response
@@ -156,6 +199,27 @@ export async function POST(request: NextRequest) {
     if (!Array.isArray(parsed.schedule_changes)) {
       parsed.schedule_changes = []
     }
+
+    // Post-process: resolve any remaining nicknames to canonical teacher names
+    // This catches cases Claude didn't resolve via the prompt
+    const resolveNickname = (name: string): string => {
+      const lower = name.toLowerCase().trim()
+      // Check hardcoded nickname map
+      const canonical = TEACHER_NICKNAMES[lower]
+      if (canonical) {
+        // Verify this canonical name exists in the school's teachers
+        if (teacherNames.some(tn => tn.toLowerCase() === canonical.toLowerCase())) {
+          return canonical
+        }
+      }
+      return name // Return as-is if no match
+    }
+
+    parsed.teacher_absences = parsed.teacher_absences.map(resolveNickname)
+    parsed.schedule_changes = parsed.schedule_changes.map(change => ({
+      ...change,
+      name: resolveNickname(change.name)
+    }))
 
     // If save flag is true, upsert to database
     if (save) {

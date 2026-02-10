@@ -453,10 +453,32 @@ export default function CalendarPage() {
         return !absentTeacherNames.has(firstName) && !absentTeacherNames.has(fullName)
       })
 
+      // Get floater classroom assignments from optimization result
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const floaterAssignments: { teacher: string; classroom: string }[] =
+        (result as any)?._debug?.floater_assignments || []
+
       const updatedStaff = filteredStaff.map(staffSchedule => {
         const optimizedBreak = getOptimizedBreaks(schedule.school.id, staffSchedule.teacher.id)
 
-        if (!optimizedBreak) return staffSchedule
+        // Check if this teacher (floater) was assigned to a classroom
+        const floaterAssignment = floaterAssignments.find(fa =>
+          fa.teacher.toLowerCase() === staffSchedule.teacher.first_name.toLowerCase()
+        )
+        let effectiveClassroomTitle = staffSchedule.teacher.classroom_title
+        if (floaterAssignment) {
+          effectiveClassroomTitle = floaterAssignment.classroom
+        }
+
+        if (!optimizedBreak) {
+          if (floaterAssignment) {
+            return {
+              ...staffSchedule,
+              teacher: { ...staffSchedule.teacher, classroom_title: effectiveClassroomTitle }
+            }
+          }
+          return staffSchedule
+        }
 
         // Rebuild blocks with the optimized breaks
         const teacher = staffSchedule.teacher
@@ -471,7 +493,7 @@ export default function CalendarPage() {
           teacher.lunch_break_end,
           optimizedBreak.break2_start,
           optimizedBreak.break2_end,
-          teacher.classroom_title,
+          effectiveClassroomTitle,
           optimizedBreak.break1_sub_name,
           optimizedBreak.break2_sub_name,
           optimizedBreak.lunch_sub_name
@@ -479,6 +501,7 @@ export default function CalendarPage() {
 
         return {
           ...staffSchedule,
+          teacher: { ...staffSchedule.teacher, classroom_title: effectiveClassroomTitle },
           blocks: newBlocks.sort((a, b) => a.start_time.localeCompare(b.start_time))
         }
       })

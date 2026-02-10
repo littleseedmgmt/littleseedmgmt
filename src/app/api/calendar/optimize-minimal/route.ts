@@ -206,7 +206,7 @@ export async function POST(request: NextRequest) {
       afternoon?: PlaygroundPeriod
     }
     const playgroundTimes: PlaygroundTimes = playgroundTimesSetting?.setting_value || {
-      morning: { start: '09:30', end: '11:00', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] },
+      morning: { start: '10:00', end: '11:00', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] },
       afternoon: { start: '15:30', end: '16:30', age_groups: ['twos', 'threes', 'preschool', 'pre_k'] }
     }
 
