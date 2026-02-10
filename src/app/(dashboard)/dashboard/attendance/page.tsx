@@ -85,6 +85,9 @@ export default function AttendancePage() {
   const [parsing, setParsing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [importError, setImportError] = useState('')
+  const [showAddScheduleChange, setShowAddScheduleChange] = useState(false)
+  const [newScheduleChangeName, setNewScheduleChangeName] = useState('')
+  const [newScheduleChangeNote, setNewScheduleChangeNote] = useState('')
 
   const handleParse = async () => {
     if (!importSchoolId || !importMessage.trim()) {
@@ -175,6 +178,9 @@ export default function AttendancePage() {
     setImportMessage('')
     setParsedSummary(null)
     setImportError('')
+    setShowAddScheduleChange(false)
+    setNewScheduleChangeName('')
+    setNewScheduleChangeNote('')
   }
 
   const openImportModal = (schoolId?: string) => {
@@ -795,20 +801,101 @@ export default function AttendancePage() {
 
                   {/* Schedule Changes */}
                   <div>
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">Schedule Changes</h3>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-medium text-gray-700">Schedule Changes</h3>
+                      {!parsedSummary.saved && (
+                        <button
+                          onClick={() => setShowAddScheduleChange(true)}
+                          className="text-xs text-amber-700 hover:text-amber-900 font-medium flex items-center gap-1"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          Add
+                        </button>
+                      )}
+                    </div>
                     {parsedSummary.schedule_changes.length > 0 ? (
                       <div className="space-y-2">
                         {parsedSummary.schedule_changes.map((change, idx) => (
                           <div
                             key={idx}
-                            className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm"
+                            className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm flex items-center justify-between"
                           >
-                            <span className="font-medium">{change.name}:</span> {change.note}
+                            <div>
+                              <span className="font-medium">{change.name}:</span> {change.note}
+                            </div>
+                            {!parsedSummary.saved && (
+                              <button
+                                onClick={() => {
+                                  const updated = parsedSummary.schedule_changes.filter((_, i) => i !== idx)
+                                  setParsedSummary({ ...parsedSummary, schedule_changes: updated })
+                                }}
+                                className="text-red-400 hover:text-red-600 ml-2 shrink-0"
+                                title="Remove"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
-                    ) : (
+                    ) : !showAddScheduleChange ? (
                       <p className="text-gray-500 text-sm italic">No schedule changes reported</p>
+                    ) : null}
+                    {/* Add Schedule Change Form */}
+                    {showAddScheduleChange && !parsedSummary.saved && (
+                      <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Name (e.g., Tam)"
+                            value={newScheduleChangeName}
+                            onChange={(e) => setNewScheduleChangeName(e.target.value)}
+                            className="flex-[1] px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-amber-500 focus:border-amber-500"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Note (e.g., comes in at 1pm)"
+                            value={newScheduleChangeNote}
+                            onChange={(e) => setNewScheduleChangeNote(e.target.value)}
+                            className="flex-[2] px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-amber-500 focus:border-amber-500"
+                          />
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            onClick={() => {
+                              if (newScheduleChangeName.trim() && newScheduleChangeNote.trim()) {
+                                setParsedSummary({
+                                  ...parsedSummary,
+                                  schedule_changes: [
+                                    ...parsedSummary.schedule_changes,
+                                    { name: newScheduleChangeName.trim(), note: newScheduleChangeNote.trim() }
+                                  ]
+                                })
+                                setNewScheduleChangeName('')
+                                setNewScheduleChangeNote('')
+                                setShowAddScheduleChange(false)
+                              }
+                            }}
+                            className="px-3 py-1 text-xs text-white bg-amber-600 rounded hover:bg-amber-700"
+                          >
+                            Add
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowAddScheduleChange(false)
+                              setNewScheduleChangeName('')
+                              setNewScheduleChangeNote('')
+                            }}
+                            className="px-3 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
 
