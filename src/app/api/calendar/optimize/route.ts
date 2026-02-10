@@ -1033,11 +1033,16 @@ export async function POST(request: NextRequest) {
         if (doesTeacherBreakOverlap(sub, breakTime, breakEndTime)) return false
         if (isSubstituteAssigned(sub.id, breakTime, breakEndTime)) return false
         if (isInfantRoom && !isInfantQualified(sub)) return false
-        // INFANT ROOM SPECIAL RULE: Same-room colleagues cannot cover each other's breaks
-        // because all infant teachers are needed to maintain ratio (1:4).
-        // They need an external person (director/floater) to come in.
+        // INFANT ROOM SPECIAL RULE for 10-minute breaks:
+        // Same-room colleagues cannot cover each other's 10-minute breaks because all
+        // infant teachers are needed to maintain ratio (1:4). Need external help (director).
+        // EXCEPTION: During nap time for lunch breaks (breakDuration > 10), ratios are
+        // relaxed enough that same-room infant colleagues CAN cover each other.
         if (isInfantRoom && teacherOnBreak.classroom_title && classroomNamesMatch(sub.classroom_title, teacherOnBreak.classroom_title)) {
-          return false
+          const isNapTime = teacherClassroom ? isDuringNapForClassroom(breakTime, teacherClassroom) : false
+          if (!(isNapTime && breakDuration > 10)) {
+            return false // Block same-room infant coverage for 10-minute breaks
+          }
         }
         return true
       }
@@ -1067,11 +1072,13 @@ export async function POST(request: NextRequest) {
       const candidates = includingDirectors ? allPotentialSubs : workingTeachers
 
       // TIER 0: Same-classroom colleague
-      // During nap time (1:24 ratio for 2+), one teacher can cover the other's lunch
+      // During nap time (relaxed ratios), one teacher can cover the other's lunch
       // They don't need to "leave" their room - they're already there
+      // For infant rooms: ONLY allowed during nap time for lunch breaks (not 10-min breaks)
+      // because infants need full ratio during awake hours
       if (teacherOnBreak.classroom_title && teacherClassroom) {
         const isNapTime = isDuringNapForClassroom(breakTime, teacherClassroom)
-        if (isNapTime && !isInfantRoom) {
+        if (isNapTime && (!isInfantRoom || breakDuration > 10)) {
           // Find colleagues in the same classroom
           const sameRoomColleagues = candidates.filter(s =>
             s.id !== teacherOnBreak.id &&
