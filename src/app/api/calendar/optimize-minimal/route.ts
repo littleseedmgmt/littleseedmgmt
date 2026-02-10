@@ -622,6 +622,28 @@ export async function POST(request: NextRequest) {
       // Get the classroom of the teacher on break
       const teacherClassroom = classrooms.find(c => c.name === teacherOnBreak.classroom_title)
       const isInfantRoom = teacherClassroom?.age_group === 'infant' || teacherClassroom?.age_group === 'toddler'
+      const infantAgeGroups = new Set(['infant', 'toddler'])
+
+      // Determine which section the teacher on break belongs to (infant vs preschool)
+      const getSection = (teacher: Teacher): string => {
+        if (!teacher.classroom_title || teacher.classroom_title.toLowerCase() === 'anywhere') return 'any'
+        const cr = classrooms.find(c => c.name === teacher.classroom_title)
+        if (cr && infantAgeGroups.has(cr.age_group)) return 'infant'
+        return 'preschool'
+      }
+      const onBreakSection = getSection(teacherOnBreak)
+
+      // Boundary check: infant teachers cover infant, preschool covers preschool
+      // Directors and truly floating staff (no classroom) are exempt
+      const passesQualificationBoundary = (sub: Teacher): boolean => {
+        if (sub.role === 'director' || sub.role === 'assistant_director') return true
+        if (!sub.classroom_title || sub.classroom_title.toLowerCase() === 'anywhere') return true
+        const subSection = getSection(sub)
+        if (subSection === 'any') return true
+        if (onBreakSection === 'infant' && subSection !== 'infant') return false
+        if (onBreakSection === 'preschool' && subSection !== 'preschool') return false
+        return true
+      }
 
       // Use all potential subs (including directors) or just essential teachers
       const candidates = includingDirectors ? allPotentialSubs : allPotentialSubs.filter(t => essentialTeacherIds.has(t.id))
@@ -641,6 +663,9 @@ export async function POST(request: NextRequest) {
 
         // Check infant qualification if needed
         if (isInfantRoom && !isInfantQualified(sub)) continue
+
+        // Enforce section boundary: infant teachers cover infant, preschool covers preschool
+        if (!passesQualificationBoundary(sub)) continue
 
         // CRITICAL: Check if this teacher can substitute
         // Directors, floaters, same-classroom teachers, freed playground teachers,

@@ -1050,11 +1050,13 @@ export async function POST(request: NextRequest) {
       }
 
       // Qualification boundary check: don't cross infant/preschool boundary
-      // Directors and floaters are exempt (they can cover anyone)
+      // Rule: infant teachers help infant teachers, non-infant teachers help among themselves
+      // Directors are exempt (they can cover anyone)
+      // Truly floating staff (no classroom or 'anywhere') can cover any section
       const passesQualificationBoundary = (sub: Teacher): boolean => {
         if (sub.role === 'director' || sub.role === 'assistant_director') return true
-        // Floaters without classroom assignment can cover anyone
-        if (!sub.classroom_title) return true
+        // Truly floating staff (no classroom or generic 'anywhere') can cover any section
+        if (!sub.classroom_title || sub.classroom_title.toLowerCase() === 'anywhere') return true
         const subSection = getSubCoverageSection(sub)
         if (onBreakSection === 'infant' && subSection !== 'infant') return false
         if (onBreakSection === 'preschool' && subSection !== 'preschool') return false
@@ -1094,13 +1096,13 @@ export async function POST(request: NextRequest) {
       }
 
       // TIER 1: Floaters (first choice — this is their primary job)
-      // Floaters can cover ANY section regardless of their qualifications
+      // Floaters assigned to a specific room must stay in their section (infant covers infant, preschool covers preschool)
+      // Truly floating staff (no classroom or 'anywhere') can cover any section
       const floaters = candidates.filter(s =>
         s.role === 'floater' || (!s.classroom_title && s.role !== 'director' && s.role !== 'assistant_director')
       )
       for (const sub of floaters) {
-        // Floaters are exempt from boundary check but still need infant qualification for infant rooms
-        if (isInfantRoom && !isInfantQualified(sub)) continue
+        if (!passesQualificationBoundary(sub)) continue
         if (!isBasicValidCandidate(sub)) continue
         recordSubstituteAssignment(sub.id, breakTime, breakEndTime)
         return `${sub.first_name} helps`
